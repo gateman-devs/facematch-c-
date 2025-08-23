@@ -1,0 +1,64 @@
+# Build artifacts
+build/
+*.o
+*.so
+*.a
+MLFaceService
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Version control
+.git/
+.gitignore
+
+# Documentation
+README.md
+docs/
+
+# Scripts (copied separately)
+setup_environment.sh
+startup_local.sh
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Test files
+tests/
+test_*
+
+# Example files
+examples/
+samples/
+
+# Large model files will be downloaded during build
+models/*.dat
+models/*.bin
+
+# Cache directories
+.cache/
+__pycache__/

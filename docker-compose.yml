@@ -1,0 +1,177 @@
+version: '3.8'
+
+services:
+  # Main ML Face Service
+  ml-face-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: ml-face-service:latest
+    container_name: ml-face-service
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      - SERVER_PORT=8080
+      - MODEL_PATH=/app/models
+    volumes:
+      # Optional: Mount models directory for persistence
+      - ./models:/app/models:ro
+      # Optional: Mount logs directory
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - ml-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: ml-face-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - ml-face-service
+    restart: unless-stopped
+    networks:
+      - ml-network
+    profiles:
+      - nginx
+      - production
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: ml-face-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - ml-network
+    profiles:
+      - cache
+      - production
+
+  # Prometheus monitoring (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ml-face-prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    restart: unless-stopped
+    networks:
+      - ml-network
+    profiles:
+      - monitoring
+      - production
+
+  # Grafana dashboards (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ml-face-grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - ml-network
+    profiles:
+      - monitoring
+      - production
+
+networks:
+  ml-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ================================
+# Usage Examples:
+# ================================
+#
+# 1. Basic service only:
+#    docker-compose up ml-face-service
+#
+# 2. Service with Nginx proxy:
+#    docker-compose --profile nginx up
+#
+# 3. Service with caching:
+#    docker-compose --profile cache up
+#
+# 4. Full production setup:
+#    docker-compose --profile production up
+#
+# 5. Development mode (build from source):
+#    docker-compose up --build
+#
+# 6. Scale the service:
+#    docker-compose up --scale ml-face-service=3
+#
+# ================================
+# Environment Variables:
+# ================================
+#
+# Create a .env file in the same directory with:
+#
+# # Server configuration
+# SERVER_PORT=8080
+# 
+# # Nginx configuration
+# NGINX_PORT=80
+# NGINX_SSL_PORT=443
+# 
+# # Redis configuration
+# REDIS_PORT=6379
+# REDIS_PASSWORD=your_secure_password
+# 
+# # Monitoring configuration
+# PROMETHEUS_PORT=9090
+# GRAFANA_PORT=3000
+# GRAFANA_PASSWORD=your_admin_password
+#
+# ================================
