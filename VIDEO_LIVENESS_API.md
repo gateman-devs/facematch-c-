@@ -15,55 +15,68 @@ Analyzes a video file for liveness by detecting head pose movements and calculat
 #### Request Body
 
 ```json
-{
-  "video_url": "https://example.com/video.mp4"
-}
+[
+  {
+    "step": 1,
+    "video_url": "https://example.com/video1.mp4"
+  },
+  {
+    "step": 2,
+    "video_url": "https://example.com/video2.mp4"
+  },
+  {
+    "step": 3,
+    "video_url": "https://example.com/video3.mp4"
+  },
+  {
+    "step": 4,
+    "video_url": "https://example.com/video4.mp4"
+  }
+]
 ```
 
 #### Response
 
 ```json
-{
-  "success": true,
-  "is_live": true,
-  "confidence": 0.85,
-  "processing_time_ms": 2450,
-  "yaw_range": 25.4,
-  "pitch_range": 18.2,
-  "frame_count": 120,
-  "duration_seconds": 4.0,
-  "has_sufficient_movement": true,
-  "pose_movements": [
-    {
-      "timestamp": 0.0,
-      "yaw": -2.1,
-      "pitch": 1.5,
-      "roll": 0.8
-    },
-    {
-      "timestamp": 0.1,
-      "yaw": -1.8,
-      "pitch": 2.1,
-      "roll": 0.9
-    }
-  ],
-  "failure_reason": "",
-  "error": null
-}
+[
+  {
+    "step": 1,
+    "direction": "left",
+    "magnitude": 8.5
+  },
+  {
+    "step": 2,
+    "direction": "right", 
+    "magnitude": 7.2
+  },
+  {
+    "step": 3,
+    "direction": "up",
+    "magnitude": 6.8
+  },
+  {
+    "step": 4,
+    "direction": "down",
+    "magnitude": 9.1
+  }
+]
 ```
 
 #### Response Fields
 
-- `is_live` (boolean): Whether the video contains sufficient live movement
-- `confidence` (float): Confidence score between 0.0 and 1.0
-- `yaw_range` (float): Maximum yaw movement range detected in degrees
-- `pitch_range` (float): Maximum pitch movement range detected in degrees
-- `frame_count` (integer): Number of frames processed
-- `duration_seconds` (float): Video duration in seconds
-- `has_sufficient_movement` (boolean): Whether sufficient head movement was detected
-- `pose_movements` (array): Array of head pose measurements with timestamps
-- `failure_reason` (string): Reason for failure if any
-- `processing_time_ms` (integer): Processing time in milliseconds
+Each object in the response array contains:
+
+- `step` (number): The step number from the request
+- `direction` (string): The detected movement direction ("left", "right", "up", "down", or "none")  
+- `magnitude` (number): The magnitude of movement in degrees (0.0 if no valid movement detected)
+
+#### Movement Detection Logic
+
+For each video:
+1. All detected movements are analyzed
+2. Movements with magnitude less than 5.0 are filtered out
+3. From the remaining valid movements, the earliest one (by start time) is selected
+4. If no valid movements are found, direction is "none" and magnitude is 0.0
 
 ## Liveness Detection Criteria
 
