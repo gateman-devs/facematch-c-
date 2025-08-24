@@ -200,6 +200,9 @@ install_macos_deps() {
     # Install Crow HTTP framework
     brew install crow
     
+    # MediaPipe installation is now handled in download_models.sh
+    echo "MediaPipe installation will be handled during model download"
+    
     echo "✓ macOS dependencies installed successfully!"
 }
 
@@ -295,8 +298,8 @@ show_next_steps() {
     echo "✓ Environment setup completed!"
     echo ""
     echo "Next steps:"
-    echo "1. Download ML models:"
-    echo "   ./models/download_models.sh"
+    echo "1. Download ML models and install MediaPipe:"
+echo "   ./models/download_models.sh"
     echo ""
     echo "2. Build the project:"
     echo "   mkdir build && cd build"

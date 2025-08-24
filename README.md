@@ -218,14 +218,17 @@ sudo apt-get install -y \
 brew install opencv dlib cmake curl nlohmann-json crow
 ```
 
-#### 2. Model Download
+#### 2. Model Download and MediaPipe Installation
 ```bash
-# Automatic model download
+# Automatic model download and MediaPipe installation
 ./models/download_models.sh
 
 # Models will be downloaded to ./models/:
 # - dlib_face_recognition_resnet_model_v1.dat (22.5MB)
 # - shape_predictor_68_face_landmarks.dat (99.7MB)
+
+# MediaPipe C++ will be automatically installed if git and bazel are available
+# This provides enhanced video processing capabilities
 ```
 
 #### 3. Build

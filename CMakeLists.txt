@@ -19,7 +19,7 @@ find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
 # OpenCV
-find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs highgui)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs highgui objdetect calib3d)
 if(OpenCV_FOUND)
     message(STATUS "OpenCV found: ${OpenCV_VERSION}")
 else()
@@ -63,6 +63,38 @@ if(NOT nlohmann_json_FOUND)
     endif()
 endif()
 
+# MediaPipe
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MEDIAPIPE mediapipe)
+if(NOT MEDIAPIPE_FOUND)
+    # Try to find MediaPipe manually
+    find_path(MEDIAPIPE_INCLUDE_DIR mediapipe/framework/api2/node.h 
+        PATHS 
+        /usr/local/include 
+        /usr/include
+        /opt/homebrew/include
+        ${CMAKE_PREFIX_PATH}/include
+    )
+    find_library(MEDIAPIPE_LIB mediapipe 
+        PATHS 
+        /usr/local/lib 
+        /usr/lib
+        /opt/homebrew/lib
+        ${CMAKE_PREFIX_PATH}/lib
+    )
+    
+    if(MEDIAPIPE_INCLUDE_DIR AND MEDIAPIPE_LIB)
+        message(STATUS "MediaPipe found manually: ${MEDIAPIPE_LIB}")
+        set(MEDIAPIPE_LIBRARIES ${MEDIAPIPE_LIB})
+        set(MEDIAPIPE_INCLUDE_DIRS ${MEDIAPIPE_INCLUDE_DIR})
+    else()
+        message(WARNING "MediaPipe not found. Video liveness detection will be disabled.")
+        set(MEDIAPIPE_FOUND FALSE)
+    endif()
+else()
+    message(STATUS "MediaPipe found via pkg-config")
+endif()
+
 # Include directories
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${CURL_INCLUDE_DIRS})
@@ -75,12 +107,17 @@ if(NLOHMANN_JSON_INCLUDE_DIR)
     include_directories(${NLOHMANN_JSON_INCLUDE_DIR})
 endif()
 
+if(MEDIAPIPE_INCLUDE_DIRS)
+    include_directories(${MEDIAPIPE_INCLUDE_DIRS})
+endif()
+
 # Source files
 set(SOURCES
     src/main.cpp
     src/image_processor.cpp
     src/face_recognizer.cpp
     src/liveness_detector.cpp
+    src/video_liveness_detector.cpp
     src/web_server.cpp
 )
 
@@ -94,6 +131,12 @@ target_link_libraries(${PROJECT_NAME}
     ${CURL_LIBRARIES}
     Threads::Threads
 )
+
+# Link MediaPipe if found
+if(MEDIAPIPE_FOUND AND MEDIAPIPE_LIBRARIES)
+    target_link_libraries(${PROJECT_NAME} ${MEDIAPIPE_LIBRARIES})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE MEDIAPIPE_AVAILABLE)
+endif()
 
 # Link Crow if found via find_package
 if(Crow_FOUND)

@@ -4,6 +4,7 @@
 #include "image_processor.hpp"
 #include "face_recognizer.hpp"
 #include "liveness_detector.hpp"
+#include "video_liveness_detector.hpp"
 #include <crow.h>
 #include <nlohmann/json.hpp>
 #include <memory>
@@ -31,6 +32,7 @@ private:
     std::unique_ptr<ImageProcessor> image_processor;
     std::unique_ptr<FaceRecognizer> face_recognizer;
     std::unique_ptr<LivenessDetector> liveness_detector;
+    std::unique_ptr<VideoLivenessDetector> video_liveness_detector;
     
     // Crow app
     crow::SimpleApp app;
@@ -42,6 +44,7 @@ private:
     // Endpoint handlers
     crow::response handleFaceComparison(const crow::request& req);
     crow::response handleLivenessCheck(const crow::request& req);
+    crow::response handleVideoLivenessCheck(const crow::request& req);
     crow::response handleHealthCheck(const crow::request& req);
     
     // Helper methods
@@ -55,6 +58,7 @@ private:
     // Validation methods
     bool validateComparisonRequest(const json& request_data);
     bool validateLivenessRequest(const json& request_data);
+    bool validateVideoLivenessRequest(const json& request_data);
     
     // Timing utility
     class Timer {
