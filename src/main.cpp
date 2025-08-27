@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
     if (!std::filesystem::exists(models_path)) {
         std::cerr << "Error: Models directory does not exist: " << models_path << std::endl;
         std::cerr << "Please ensure the models directory exists and contains the required model files." << std::endl;
-        std::cerr << "Run the models/download_models.sh script to download models automatically." << std::endl;
+        std::cerr << "Run the ./download_models.sh script to download models automatically." << std::endl;
         return 1;
     }
     
@@ -86,8 +86,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  GET  /health           - Health check" << std::endl;
         std::cout << "  POST /compare-faces    - Compare two faces" << std::endl;
         std::cout << "  POST /liveness-check   - Check face liveness" << std::endl;
-        std::cout << "  POST /liveness/video   - Multi-step video liveness check" << std::endl;
-        std::cout << "  POST /video/liveness   - Single video liveness with MediaPipe FaceMesh" << std::endl;
+        std::cout << "  POST /video/liveness   - Video liveness detection" << std::endl;
         std::cout << "\nPress Ctrl+C to stop the server." << std::endl;
         
         // Start server (blocking call)

@@ -94,12 +94,12 @@ check_models() {
 download_models() {
     log "Downloading ML models..."
     
-    if [[ ! -x "$MODELS_DIR/download_models.sh" ]]; then
-        log "✗ Model download script not found or not executable: $MODELS_DIR/download_models.sh"
+    if [[ ! -x "$SCRIPT_DIR/download_models.sh" ]]; then
+        log "✗ Model download script not found or not executable: $SCRIPT_DIR/download_models.sh"
         return 1
     fi
     
-    cd "$MODELS_DIR"
+    cd "$SCRIPT_DIR"
     if ./download_models.sh; then
         log "✓ Models downloaded successfully"
         cd "$SCRIPT_DIR"
@@ -303,7 +303,7 @@ main() {
             log "Attempting to download missing models..."
             if ! download_models; then
                 log "✗ Failed to download models. Cannot proceed."
-                log "Try running: ./models/download_models.sh"
+                log "Try running: ./download_models.sh"
                 exit 1
             fi
         fi

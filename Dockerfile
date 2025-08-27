@@ -137,12 +137,12 @@ COPY --from=builder /usr/local/lib/libdlib.so* /usr/local/lib/
 COPY --from=builder /usr/local/include/dlib/ /usr/local/include/dlib/
 
 # Copy scripts and configuration
-COPY models/download_models.sh /app/models/
+COPY download_models.sh /app/
 COPY models/.gitkeep /app/models/
 
 # Make scripts executable
 RUN chmod +x /app/MLFaceService && \
-    chmod +x /app/models/download_models.sh
+    chmod +x /app/download_models.sh
 
 # Update library cache
 RUN ldconfig
@@ -155,10 +155,10 @@ RUN mkdir -p /app/models && \
 USER appuser
 
 # Download models during build (cached layer)
-RUN cd /app/models && \
+RUN cd /app && \
     ./download_models.sh && \
     # Verify models were downloaded
-    ls -la *.dat
+    ls -la models/*.dat
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

@@ -299,7 +299,7 @@ show_next_steps() {
     echo ""
     echo "Next steps:"
     echo "1. Download ML models and install MediaPipe:"
-echo "   ./models/download_models.sh"
+echo "   ./download_models.sh"
     echo ""
     echo "2. Build the project:"
     echo "   mkdir build && cd build"

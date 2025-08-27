@@ -176,7 +176,7 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/models)
 
 # Custom target to download models
 add_custom_target(download_models
-    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/models/download_models.sh
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/download_models.sh
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Downloading ML models"
 )

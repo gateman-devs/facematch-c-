@@ -84,12 +84,6 @@ bool WebServer::initialize(const std::string& models_path_param) {
             return handleLivenessCheck(req);
         });
         
-        // Video liveness check endpoint
-        CROW_ROUTE(app, "/liveness/video").methods("POST"_method)
-        ([this](const crow::request& req) {
-            return handleVideoLivenessCheck(req);
-        });
-
         // Single video liveness check endpoint (MediaPipe FaceMesh only)
         CROW_ROUTE(app, "/video/liveness").methods("POST"_method)
         ([this](const crow::request& req) {
@@ -361,94 +355,6 @@ crow::response WebServer::handleSingleVideoLivenessCheck(const crow::request& re
     }
 }
 
-crow::response WebServer::handleVideoLivenessCheck(const crow::request& req) {
-    Timer timer;
-    
-    try {
-        // Parse request body
-        json request_data = parseRequestBody(req.body);
-        
-        if (!validateVideoLivenessRequest(request_data)) {
-            return crow::response(400, createErrorResponse("Invalid request format. Required: array of 4 objects with 'step' (number) and 'video_url' (string)").dump());
-        }
-        
-        if (!video_liveness_detector || !video_liveness_detector->isInitialized()) {
-            return crow::response(503, createErrorResponse("Video liveness detection not available").dump());
-        }
-        
-        // Process each video in the array
-        json results = json::array();
-        
-        for (const auto& video_obj : request_data) {
-            int step = video_obj["step"];
-            std::string video_url = video_obj["video_url"];
-            
-            // Initialize result object for this step
-            json step_result = {
-                {"step", step},
-                {"direction", "none"},
-                {"magnitude", 0.0f}
-            };
-            
-            try {
-                // Perform video liveness analysis
-                VideoLivenessAnalysis analysis = video_liveness_detector->analyzeVideoFromUrl(video_url);
-                
-                if (!analysis.has_failure && !analysis.directional_movements.empty()) {
-                    // Filter movements with magnitude >= 5
-                    std::vector<DirectionalMovement> valid_movements;
-                    for (const auto& movement : analysis.directional_movements) {
-                        if (movement.magnitude >= 5.0f) {
-                            valid_movements.push_back(movement);
-                        }
-                    }
-                    
-                    // If we have valid movements, take the earliest one
-                    if (!valid_movements.empty()) {
-                        // Sort by start_time to get the earliest
-                        std::sort(valid_movements.begin(), valid_movements.end(), 
-                                [](const DirectionalMovement& a, const DirectionalMovement& b) {
-                                    return a.start_time < b.start_time;
-                                });
-                        
-                        const auto& earliest_movement = valid_movements[0];
-                        
-                        // Convert direction to string
-                        std::string direction_str;
-                        switch (earliest_movement.direction) {
-                            case MovementDirection::LEFT: direction_str = "left"; break;
-                            case MovementDirection::RIGHT: direction_str = "right"; break;
-                            case MovementDirection::UP: direction_str = "up"; break;
-                            case MovementDirection::DOWN: direction_str = "down"; break;
-                            default: direction_str = "none"; break;
-                        }
-                        
-                        step_result["direction"] = direction_str;
-                        step_result["magnitude"] = earliest_movement.magnitude;
-                    }
-                }
-                
-            } catch (const std::exception& e) {
-                std::cerr << "Error processing video for step " << step << ": " << e.what() << std::endl;
-                // Keep default values (direction: "none", magnitude: 0.0)
-            }
-            
-            results.push_back(step_result);
-        }
-        
-        crow::response res(200, results.dump());
-        res.add_header("Access-Control-Allow-Origin", "*");
-        res.add_header("Content-Type", "application/json");
-        return res;
-        
-    } catch (const std::exception& e) {
-        std::cerr << "Error in video liveness check: " << e.what() << std::endl;
-        json error_response = createErrorResponse("Internal server error");
-        error_response["processing_time_ms"] = timer.elapsed_ms();
-        return crow::response(500, error_response.dump());
-    }
-}
-
 crow::response WebServer::handleHealthCheck(const crow::request& req) {
     json health_data = {
         {"status", "healthy"},
@@ -516,25 +422,6 @@ bool WebServer::validateComparisonRequest(const json& request_data) {
 bool WebServer::validateLivenessRequest(const json& request_data) {
     return request_data.contains("image") && request_data["image"].is_string() &&
            !request_data["image"].get<std::string>().empty();
-}
-
-bool WebServer::validateVideoLivenessRequest(const json& request_data) {
-    // Check if request_data is an array of 4 objects
-    if (!request_data.is_array() || request_data.size() != 4) {
-        return false;
-    }
-
-    // Validate each object in the array
-    for (const auto& video_obj : request_data) {
-        if (!video_obj.is_object() ||
-            !video_obj.contains("step") || !video_obj["step"].is_number() ||
-            !video_obj.contains("video_url") || !video_obj["video_url"].is_string() ||
-            video_obj["video_url"].get<std::string>().empty()) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 bool WebServer::validateSingleVideoLivenessRequest(const json& request_data) {
