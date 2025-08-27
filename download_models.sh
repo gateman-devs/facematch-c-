@@ -87,7 +87,7 @@ echo "Downloading dlib face recognition model..."
 download_with_checksum \
     "http://dlib.net/files/dlib_face_recognition_resnet_model_v1.dat.bz2" \
     "dlib_face_recognition_resnet_model_v1.dat.bz2" \
-    "9a4ad6a3f1c0a20d4cbf90ad3bb1be7b20bffa863ac84749a57a08244e322fd8"
+    "abb1f61041e434465855ce81c2bd546e830d28bcbed8d27ffbe5bb408b11553a"
 
 # Extract if needed
 if [[ -f "dlib_face_recognition_resnet_model_v1.dat.bz2" && ! -f "dlib_face_recognition_resnet_model_v1.dat" ]]; then
@@ -105,7 +105,7 @@ echo "Downloading dlib facial landmarks model..."
 download_with_checksum \
     "http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2" \
     "shape_predictor_68_face_landmarks.dat.bz2" \
-    "fbdc2cb4055c449bfdfdcda8c9ee6ba50e1d5e52e8c3b6b5a14b9a5a7d8e8f2f"
+    "7d6637b8f34ddb0c1363e09a4628acb34314019ec3566fd66b80c04dda6980f5"
 
 # Extract if needed
 if [[ -f "shape_predictor_68_face_landmarks.dat.bz2" && ! -f "shape_predictor_68_face_landmarks.dat" ]]; then
@@ -168,7 +168,7 @@ required_models=(
 missing_models=()
 for model in "${required_models[@]}"; do
     if [[ -f "$model" ]]; then
-        local size=$(ls -lh "$model" | awk '{print $5}')
+        size=$(ls -lh "$model" | awk '{print $5}')
         echo "✓ $model ($size)"
     else
         echo "✗ $model (missing)"
@@ -184,7 +184,7 @@ mediapipe_models=(
 
 for model in "${mediapipe_models[@]}"; do
     if [[ -f "$model" ]]; then
-        local size=$(ls -lh "$model" | awk '{print $5}')
+        size=$(ls -lh "$model" | awk '{print $5}')
         echo "✓ $model ($size) [optional]"
     else
         echo "⚠ $model (missing) [optional - video liveness may not work]"
@@ -195,12 +195,12 @@ if [[ ${#missing_models[@]} -eq 0 ]]; then
     echo ""
     echo "✓ All required models downloaded successfully!"
     echo "✓ Models are ready for use"
-    return 0
+    exit 0
 else
     echo ""
     echo "✗ Some required models are missing:"
     for model in "${missing_models[@]}"; do
         echo "  - $model"
     done
-    return 1
+    exit 1
 fi

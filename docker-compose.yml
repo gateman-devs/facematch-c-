@@ -1,6 +1,30 @@
 version: '3.8'
 
 services:
+  # Redis Cache Service
+  redis:
+    image: redis:7-alpine
+    container_name: ml-face-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-}"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
   # Main ML Face Service
   ml-face-service:
     build:
@@ -15,9 +39,15 @@ services:
     environment:
       - SERVER_PORT=8080
       - MODEL_PATH=/app/models
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     volumes:
       # Mount models directory for persistence
       - ./models:/app/models:ro
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -34,6 +64,11 @@ services:
           cpus: '0.5'
           memory: 1G
 
+# Persistent volumes
+volumes:
+  redis_data:
+    driver: local
+
 # ================================
 # Usage:
 # ================================
@@ -45,9 +80,20 @@ services:
 #   docker-compose up -d
 #
 # View logs:
-#   docker-compose logs -f
+#   docker-compose logs -f ml-face-service
+#   docker-compose logs -f redis
 #
-# Stop service:
+# Stop services:
 #   docker-compose down
+#
+# Stop and remove volumes (Redis data):
+#   docker-compose down -v
+#
+# Environment variables:
+#   Create .env file from env.example for custom configuration
+#   cp env.example .env
+#
+# Redis access:
+#   docker-compose exec redis redis-cli
 #
 # ================================

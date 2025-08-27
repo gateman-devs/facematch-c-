@@ -73,6 +73,11 @@ install_ubuntu_deps() {
     sudo apt-get install -y \
         nlohmann-json3-dev
     
+    # Install Redis and hiredis
+    sudo apt-get install -y \
+        redis-server \
+        libhiredis-dev
+    
     # Install threading libraries
     sudo apt-get install -y \
         libtbb-dev
@@ -109,7 +114,9 @@ install_centos_deps() {
     # Install development libraries
     sudo yum install -y \
         libcurl-devel \
-        openssl-devel
+        openssl-devel \
+        redis \
+        hiredis-devel
     
     echo "✓ CentOS/RHEL dependencies installed successfully!"
     echo "Note: You may need to build dlib and nlohmann/json from source."
@@ -150,6 +157,11 @@ install_fedora_deps() {
     # Install JSON library
     sudo dnf install -y \
         json-devel
+    
+    # Install Redis and hiredis
+    sudo dnf install -y \
+        redis \
+        hiredis-devel
     
     echo "✓ Fedora dependencies installed successfully!"
 }
@@ -199,6 +211,9 @@ install_macos_deps() {
     
     # Install Crow HTTP framework
     brew install crow
+    
+    # Install Redis and hiredis
+    brew install redis hiredis
     
     # MediaPipe installation is now handled in download_models.sh
     echo "MediaPipe installation will be handled during model download"
@@ -298,15 +313,18 @@ show_next_steps() {
     echo "✓ Environment setup completed!"
     echo ""
     echo "Next steps:"
-    echo "1. Download ML models and install MediaPipe:"
-echo "   ./download_models.sh"
+    echo "1. Setup Redis (if not already done):"
+    echo "   ./setup_redis.sh"
     echo ""
-    echo "2. Build the project:"
+    echo "2. Download ML models and install MediaPipe:"
+    echo "   ./download_models.sh"
+    echo ""
+    echo "3. Build the project:"
     echo "   mkdir build && cd build"
     echo "   cmake .."
     echo "   make -j\$(nproc)"
     echo ""
-    echo "3. Or use the startup script:"
+    echo "4. Or use the startup script:"
     echo "   ./startup_local.sh"
     echo ""
     echo "=========================================="

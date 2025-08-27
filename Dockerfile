@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y \
     # Networking libraries
     libcurl4-openssl-dev \
     libssl-dev \
+    # Redis client
+    libhiredis-dev \
     # Threading libraries
     libtbb-dev \
     # Additional dependencies
@@ -113,6 +115,8 @@ RUN apt-get update && apt-get install -y \
     # Networking
     libcurl4 \
     libssl3 \
+    # Redis client runtime
+    libhiredis0.14 \
     # System libraries
     libtbb12 \
     # Utilities for model download

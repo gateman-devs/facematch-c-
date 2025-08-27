@@ -4,12 +4,16 @@
 #include <fstream>
 #include <ctime>
 #include <algorithm>
+#include <cstdlib>
 
 WebServer::WebServer() : initialized(false) {
     image_processor = std::make_unique<ImageProcessor>();
     face_recognizer = std::make_unique<FaceRecognizer>();
     liveness_detector = std::make_unique<LivenessDetector>();
     video_liveness_detector = std::make_unique<VideoLivenessDetector>();
+    challenge_generator = std::make_unique<ChallengeGenerator>();
+    redis_cache = std::make_unique<RedisCache>();
+    challenge_verifier = std::make_unique<ChallengeVerifier>();
 }
 
 bool WebServer::initialize(const std::string& models_path_param) {
@@ -62,6 +66,37 @@ bool WebServer::initialize(const std::string& models_path_param) {
             // Continue without video liveness detection
         }
         
+        // Initialize Redis cache
+        try {
+            // Get Redis configuration from environment variables
+            std::string redis_host = std::getenv("REDIS_HOST") ? std::getenv("REDIS_HOST") : "127.0.0.1";
+            int redis_port = std::getenv("REDIS_PORT") ? std::atoi(std::getenv("REDIS_PORT")) : 6379;
+            std::string redis_password = std::getenv("REDIS_PASSWORD") ? std::getenv("REDIS_PASSWORD") : "";
+            
+            std::cout << "Attempting to connect to Redis at " << redis_host << ":" << redis_port << std::endl;
+            
+            if (!redis_cache->initialize(redis_host, redis_port, redis_password)) {
+                std::cerr << "Warning: Failed to initialize Redis cache - challenge functionality may be limited" << std::endl;
+                // Don't return false - continue without Redis cache for now
+            } else {
+                std::cout << "Redis cache initialized successfully" << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Warning: Exception during Redis cache initialization: " << e.what() << std::endl;
+            // Continue without Redis cache
+        }
+        
+        // Initialize challenge verifier
+        try {
+            if (!challenge_verifier->initialize(std::shared_ptr<VideoLivenessDetector>(std::move(video_liveness_detector)))) {
+                std::cerr << "Warning: Failed to initialize challenge verifier" << std::endl;
+                // Don't return false - continue without challenge verifier
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Warning: Exception during challenge verifier initialization: " << e.what() << std::endl;
+            // Continue without challenge verifier
+        }
+        
         // Setup routes
         setupCORS();
         setupErrorHandlers();
@@ -88,6 +123,18 @@ bool WebServer::initialize(const std::string& models_path_param) {
         CROW_ROUTE(app, "/video/liveness").methods("POST"_method)
         ([this](const crow::request& req) {
             return handleSingleVideoLivenessCheck(req);
+        });
+        
+        // Challenge generation endpoint
+        CROW_ROUTE(app, "/generate-challenge").methods("POST"_method)
+        ([this](const crow::request& req) {
+            return handleGenerateChallenge(req);
+        });
+        
+        // Video liveness verification endpoint
+        CROW_ROUTE(app, "/verify-video-liveness").methods("POST"_method)
+        ([this](const crow::request& req) {
+            return handleVerifyVideoLiveness(req);
         });
         
         initialized = true;
@@ -360,6 +407,8 @@ crow::response WebServer::handleHealthCheck(const crow::request& req) {
         {"status", "healthy"},
         {"models_loaded", initialized && face_recognizer->isInitialized() && liveness_detector->isInitialized()},
         {"video_liveness_available", video_liveness_detector && video_liveness_detector->isInitialized()},
+        {"redis_connected", redis_cache && redis_cache->isConnected()},
+        {"challenge_system_available", challenge_generator && challenge_verifier && challenge_verifier->isInitialized()},
         {"version", "1.0.0"},
         {"timestamp", std::time(nullptr)}
     };
@@ -430,6 +479,180 @@ bool WebServer::validateSingleVideoLivenessRequest(const json& request_data) {
            request_data.contains("video_url") &&
            request_data["video_url"].is_string() &&
            !request_data["video_url"].get<std::string>().empty();
+}
+
+crow::response WebServer::handleGenerateChallenge(const crow::request& req) {
+    Timer timer;
+    
+    try {
+        // Parse request body (can be empty for challenge generation)
+        json request_data;
+        if (!req.body.empty()) {
+            request_data = parseRequestBody(req.body);
+        }
+        
+        // Check if challenge system is available
+        if (!challenge_generator) {
+            return createResponse(503, createErrorResponse("Challenge generator not available"));
+        }
+        
+        if (!redis_cache || !redis_cache->isConnected()) {
+            return createResponse(503, createErrorResponse("Redis cache not available"));
+        }
+        
+        // Get TTL from request or use default (5 minutes)
+        int ttl_seconds = 300;
+        if (request_data.contains("ttl_seconds") && request_data["ttl_seconds"].is_number()) {
+            ttl_seconds = request_data["ttl_seconds"].get<int>();
+            // Limit TTL to reasonable range (1 minute to 30 minutes)
+            ttl_seconds = std::max(60, std::min(1800, ttl_seconds));
+        }
+        
+        // Generate challenge
+        Challenge challenge = challenge_generator->generateChallenge(ttl_seconds);
+        
+        // Store in Redis
+        if (!redis_cache->storeChallenge(challenge)) {
+            return createResponse(500, createErrorResponse("Failed to store challenge in cache"));
+        }
+        
+        // Create response
+        json response_data = {
+            {"challenge_id", challenge.id},
+            {"directions", json::array()},
+            {"ttl_seconds", challenge.ttl_seconds},
+            {"processing_time_ms", timer.elapsed_ms()},
+            {"error", nullptr}
+        };
+        
+        // Add directions to response
+        for (const auto& direction : challenge.directions) {
+            response_data["directions"].push_back(Challenge::directionToString(direction));
+        }
+        
+        crow::response res(200, createSuccessResponse(response_data).dump());
+        res.add_header("Access-Control-Allow-Origin", "*");
+        res.add_header("Content-Type", "application/json");
+        return res;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error generating challenge: " << e.what() << std::endl;
+        json error_response = createErrorResponse("Internal server error");
+        error_response["processing_time_ms"] = timer.elapsed_ms();
+        return crow::response(500, error_response.dump());
+    }
+}
+
+crow::response WebServer::handleVerifyVideoLiveness(const crow::request& req) {
+    Timer timer;
+    
+    try {
+        // Parse request body
+        json request_data = parseRequestBody(req.body);
+        
+        if (!validateVerifyVideoLivenessRequest(request_data)) {
+            return createResponse(400, createErrorResponse("Invalid request format. Required: challenge_id and video_urls array with 4 URLs"));
+        }
+        
+        // Check if challenge system is available
+        if (!challenge_verifier || !challenge_verifier->isInitialized()) {
+            return createResponse(503, createErrorResponse("Challenge verifier not available"));
+        }
+        
+        if (!redis_cache || !redis_cache->isConnected()) {
+            return createResponse(503, createErrorResponse("Redis cache not available"));
+        }
+        
+        std::string challenge_id = request_data["challenge_id"];
+        std::vector<std::string> video_urls = request_data["video_urls"];
+        
+        // Retrieve challenge from Redis
+        auto challenge_opt = redis_cache->getChallenge(challenge_id);
+        if (!challenge_opt) {
+            return createResponse(404, createErrorResponse("Challenge not found or expired"));
+        }
+        
+        Challenge challenge = challenge_opt.value();
+        
+        // Verify the challenge
+        ChallengeVerificationResult verification_result = challenge_verifier->verifyChallenge(challenge, video_urls);
+        
+        // Delete challenge from cache after verification (one-time use)
+        redis_cache->deleteChallenge(challenge_id);
+        
+        // Create response
+        json response_data = verification_result.toJson();
+        response_data["processing_time_ms"] = timer.elapsed_ms();
+        response_data["error"] = nullptr;
+        
+        // Return simple true/false result as requested
+        json simple_response = {
+            {"result", verification_result.passed},
+            {"expected_directions", response_data["expected_directions"]},
+            {"detected_directions", response_data["detected_directions"]},
+            {"processing_time_ms", timer.elapsed_ms()},
+            {"error", nullptr}
+        };
+        
+        int status_code = verification_result.passed ? 200 : 400;
+        crow::response res(status_code, createSuccessResponse(simple_response).dump());
+        res.add_header("Access-Control-Allow-Origin", "*");
+        res.add_header("Content-Type", "application/json");
+        return res;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error verifying video liveness: " << e.what() << std::endl;
+        json error_response = createErrorResponse("Internal server error");
+        error_response["processing_time_ms"] = timer.elapsed_ms();
+        return crow::response(500, error_response.dump());
+    }
+}
+
+bool WebServer::validateGenerateChallengeRequest(const json& request_data) {
+    // Challenge generation can work with empty request or with optional ttl_seconds
+    if (request_data.is_null()) {
+        return true;
+    }
+    
+    if (!request_data.is_object()) {
+        return false;
+    }
+    
+    // If ttl_seconds is provided, it must be a number
+    if (request_data.contains("ttl_seconds")) {
+        return request_data["ttl_seconds"].is_number();
+    }
+    
+    return true;
+}
+
+bool WebServer::validateVerifyVideoLivenessRequest(const json& request_data) {
+    if (!request_data.is_object()) {
+        return false;
+    }
+    
+    // Must have challenge_id
+    if (!request_data.contains("challenge_id") || 
+        !request_data["challenge_id"].is_string() ||
+        request_data["challenge_id"].get<std::string>().empty()) {
+        return false;
+    }
+    
+    // Must have video_urls array with exactly 4 URLs
+    if (!request_data.contains("video_urls") || 
+        !request_data["video_urls"].is_array() ||
+        request_data["video_urls"].size() != 4) {
+        return false;
+    }
+    
+    // All video URLs must be non-empty strings
+    for (const auto& url : request_data["video_urls"]) {
+        if (!url.is_string() || url.get<std::string>().empty()) {
+            return false;
+        }
+    }
+    
+    return true;
 }
 
 void WebServer::setupCORS() {

@@ -5,6 +5,9 @@
 #include "face_recognizer.hpp"
 #include "liveness_detector.hpp"
 #include "video_liveness_detector.hpp"
+#include "challenge_generator.hpp"
+#include "redis_cache.hpp"
+#include "challenge_verifier.hpp"
 #include <crow.h>
 #include <nlohmann/json.hpp>
 #include <memory>
@@ -33,6 +36,9 @@ private:
     std::unique_ptr<FaceRecognizer> face_recognizer;
     std::unique_ptr<LivenessDetector> liveness_detector;
     std::unique_ptr<VideoLivenessDetector> video_liveness_detector;
+    std::unique_ptr<ChallengeGenerator> challenge_generator;
+    std::unique_ptr<RedisCache> redis_cache;
+    std::unique_ptr<ChallengeVerifier> challenge_verifier;
     
     // Crow app
     crow::SimpleApp app;
@@ -45,6 +51,8 @@ private:
     crow::response handleFaceComparison(const crow::request& req);
     crow::response handleLivenessCheck(const crow::request& req);
     crow::response handleSingleVideoLivenessCheck(const crow::request& req);
+    crow::response handleGenerateChallenge(const crow::request& req);
+    crow::response handleVerifyVideoLiveness(const crow::request& req);
     crow::response handleHealthCheck(const crow::request& req);
     
     // Helper methods
@@ -59,6 +67,8 @@ private:
     bool validateComparisonRequest(const json& request_data);
     bool validateLivenessRequest(const json& request_data);
     bool validateSingleVideoLivenessRequest(const json& request_data);
+    bool validateGenerateChallengeRequest(const json& request_data);
+    bool validateVerifyVideoLivenessRequest(const json& request_data);
     
     // Timing utility
     class Timer {

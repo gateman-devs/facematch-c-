@@ -42,6 +42,23 @@ else()
     message(FATAL_ERROR "libcurl not found")
 endif()
 
+# Redis client (hiredis)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(HIREDIS hiredis)
+if(HIREDIS_FOUND)
+    # Use the full library path from pkg-config
+    set(HIREDIS_LINK_LIBRARIES ${HIREDIS_LDFLAGS})
+else()
+    message(STATUS "hiredis not found via pkg-config, checking for manual installation")
+    find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h PATHS /usr/local/include /usr/include)
+    find_library(HIREDIS_LIBRARY hiredis PATHS /usr/local/lib /usr/lib)
+    if(NOT HIREDIS_INCLUDE_DIR OR NOT HIREDIS_LIBRARY)
+        message(FATAL_ERROR "hiredis not found. Please install hiredis library.")
+    endif()
+    set(HIREDIS_LINK_LIBRARIES ${HIREDIS_LIBRARY})
+    set(HIREDIS_INCLUDE_DIRS ${HIREDIS_INCLUDE_DIR})
+endif()
+
 # Crow (HTTP framework)
 find_package(Crow QUIET)
 if(NOT Crow_FOUND)
@@ -93,6 +110,7 @@ endif()
 # Include directories
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${CURL_INCLUDE_DIRS})
+include_directories(${HIREDIS_INCLUDE_DIRS})
 
 if(CROW_INCLUDE_DIR)
     include_directories(${CROW_INCLUDE_DIR})
@@ -114,6 +132,9 @@ set(SOURCES
     src/liveness_detector.cpp
     src/video_liveness_detector.cpp
     src/web_server.cpp
+    src/challenge_generator.cpp
+    src/redis_cache.cpp
+    src/challenge_verifier.cpp
 )
 
 # Create executable
@@ -124,6 +145,7 @@ target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBS}
     dlib::dlib
     ${CURL_LIBRARIES}
+    ${HIREDIS_LINK_LIBRARIES}
     Threads::Threads
 )
 

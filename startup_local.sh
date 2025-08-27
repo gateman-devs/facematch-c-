@@ -226,6 +226,55 @@ needs_rebuild() {
     return 1
 }
 
+# Function to check and configure Redis
+check_redis() {
+    log "Checking Redis configuration..."
+    
+    # Check if Redis environment variables are already set
+    if [[ -n "$REDIS_HOST" ]]; then
+        log "Using Redis configuration from environment variables:"
+        log "  Host: ${REDIS_HOST}"
+        log "  Port: ${REDIS_PORT:-6379}"
+        return 0
+    fi
+    
+    # Try to detect local Redis
+    log "Detecting local Redis instance..."
+    
+    # Check if Redis is running locally
+    if command -v redis-cli >/dev/null 2>&1; then
+        if redis-cli ping >/dev/null 2>&1; then
+            log "✓ Found running Redis instance on localhost:6379"
+            export REDIS_HOST="127.0.0.1"
+            export REDIS_PORT="6379"
+            export REDIS_PASSWORD=""
+            return 0
+        else
+            log "⚠ Redis CLI found but Redis is not running"
+        fi
+    else
+        log "⚠ Redis CLI not found"
+    fi
+    
+    # Check if we can connect to Redis on common ports
+    for port in 6379 6380 6381; do
+        if timeout 2 bash -c "</dev/tcp/localhost/$port" 2>/dev/null; then
+            log "✓ Found Redis running on localhost:$port"
+            export REDIS_HOST="127.0.0.1"
+            export REDIS_PORT="$port"
+            export REDIS_PASSWORD=""
+            return 0
+        fi
+    done
+    
+    log "⚠ No local Redis instance found"
+    log "  Challenge system will be disabled"
+    log "  To enable challenge system:"
+    log "    1. Install and start Redis: ./setup_redis.sh"
+    log "    2. Or set REDIS_HOST environment variable"
+    return 1
+}
+
 # Function to start the service
 start_service() {
     local binary_path="$BUILD_DIR/MLFaceService"
@@ -234,6 +283,16 @@ start_service() {
     log "Port: $PORT"
     log "Models: $MODELS_DIR"
     log "Binary: $binary_path"
+    
+    # Configure Redis
+    check_redis
+    
+    if [[ -n "$REDIS_HOST" ]]; then
+        log "Redis: ${REDIS_HOST}:${REDIS_PORT}"
+    else
+        log "Redis: Not configured (challenge system disabled)"
+    fi
+    
     log ""
     
     # Change to build directory to ensure relative paths work

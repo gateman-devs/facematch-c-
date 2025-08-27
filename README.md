@@ -6,6 +6,9 @@ A C++ web service for face recognition and liveness detection using OpenCV and d
 
 - **Face Comparison**: Compare two faces with confidence scoring
 - **Liveness Detection**: Detect fake/printed images 
+- **Challenge-Based Video Liveness**: Generate directional challenges and verify user compliance
+- **Concurrent Video Processing**: Process multiple videos simultaneously for fast verification
+- **Redis Caching**: Secure challenge storage with TTL expiration
 - **RESTful API**: JSON-based HTTP endpoints
 - **Docker Support**: Easy deployment with Docker
 
@@ -14,19 +17,27 @@ A C++ web service for face recognition and liveness detection using OpenCV and d
 ### Docker (Recommended)
 
 ```bash
-# Build and start
+# Build and start (includes Redis)
 docker-compose up --build
 
 # Service available at http://localhost:8080
+# Redis available at localhost:6379
+
+# Optional: Configure Redis password
+cp env.example .env
+# Edit .env to set REDIS_PASSWORD
 ```
 
 ### Local Development
 
 ```bash
-# Install dependencies
+# Install dependencies (includes Redis)
 ./setup_environment.sh
 
-# Start service (downloads models, builds, and runs)
+# Setup Redis (if not auto-installed)
+./setup_redis.sh
+
+# Start service (auto-detects Redis, downloads models, builds, and runs)
 ./startup_local.sh
 ```
 
@@ -58,6 +69,83 @@ Content-Type: application/json
 }
 ```
 
+### Challenge Generation
+```http
+POST /generate-challenge
+Content-Type: application/json
+
+{
+  "ttl_seconds": 300  // Optional: Time to live in seconds (default: 300, range: 60-1800)
+}
+
+Response:
+{
+  "success": true,
+  "challenge_id": "challenge_1701234567890_1234",
+  "directions": ["left", "up", "right", "down"],
+  "ttl_seconds": 300
+}
+```
+
+### Video Liveness Verification
+```http
+POST /verify-video-liveness
+Content-Type: application/json
+
+{
+  "challenge_id": "challenge_1701234567890_1234",
+  "video_urls": [
+    "https://example.com/video1.mp4",  // Video for direction 0 (left)
+    "https://example.com/video2.mp4",  // Video for direction 1 (up)
+    "https://example.com/video3.mp4",  // Video for direction 2 (right)
+    "https://example.com/video4.mp4"   // Video for direction 3 (down)
+  ]
+}
+
+Response:
+{
+  "success": true,
+  "result": true,  // true if challenge passed, false if failed
+  "expected_directions": ["left", "up", "right", "down"],
+  "detected_directions": ["left", "up", "right", "down"]
+}
+```
+
+## Challenge System Workflow
+
+The challenge-based liveness detection works as follows:
+
+1. **Generate Challenge**: Call `/generate-challenge` to get a unique challenge with 4 random directions (up, down, left, right)
+2. **Record Videos**: User records 4 short videos (1.5-5 seconds each), looking in the directions specified by the challenge
+3. **Verify Challenge**: Call `/verify-video-liveness` with the challenge ID and 4 video URLs
+4. **Concurrent Processing**: The system processes all 4 videos simultaneously using head pose estimation
+5. **Direction Verification**: Each video is analyzed to detect the primary head movement direction
+6. **Result**: Returns `true` if all detected directions match the challenge, `false` otherwise
+
+### Important Notes:
+- **Redis Required**: Challenge system requires Redis for caching challenges
+- Challenges expire after the specified TTL (default: 5 minutes)
+- Each challenge can only be used once (deleted after verification)
+- Videos must show clear head movements in the specified directions
+- The system uses MediaPipe FaceMesh (if available) or OpenCV for head pose estimation
+- All video processing is done concurrently for maximum performance
+
+### Example Usage:
+```bash
+# 1. Generate challenge
+curl -X POST http://localhost:8080/generate-challenge
+
+# 2. User records 4 videos based on returned directions
+
+# 3. Verify videos
+curl -X POST http://localhost:8080/verify-video-liveness \
+  -H "Content-Type: application/json" \
+  -d '{
+    "challenge_id": "challenge_1701234567890_1234",
+    "video_urls": ["video1.mp4", "video2.mp4", "video3.mp4", "video4.mp4"]
+  }'
+```
+
 ### Input Formats
 - Base64 data URLs: `data:image/jpeg;base64,<base64-data>`
 - HTTP URLs: `https://example.com/image.jpg`
@@ -70,6 +158,8 @@ Content-Type: application/json
 - Crow HTTP framework
 - libcurl
 - nlohmann/json
+- hiredis (Redis client)
+- Redis server (for challenge caching)
 - CMake 3.16+
 
 ## Build & Run

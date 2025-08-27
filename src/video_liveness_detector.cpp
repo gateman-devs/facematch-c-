@@ -5,6 +5,8 @@
 #include <fstream>
 #include <curl/curl.h>
 #include <filesystem>
+#include <thread>
+#include <functional>
 
 VideoLivenessDetector::VideoLivenessDetector() : initialized(false) {
 #ifdef MEDIAPIPE_AVAILABLE
@@ -53,8 +55,9 @@ VideoLivenessAnalysis VideoLivenessDetector::analyzeVideoFromUrl(const std::stri
     }
     
     try {
-        // Create temporary filename
-        std::string temp_filename = "/tmp/gateman_video_" + std::to_string(std::time(nullptr)) + ".mp4";
+        // Create temporary filename with thread ID to avoid collisions
+        std::hash<std::thread::id> hasher;
+        std::string temp_filename = "/tmp/gateman_video_" + std::to_string(std::time(nullptr)) + "_" + std::to_string(hasher(std::this_thread::get_id())) + ".mp4";
         
         // Download video
         cv::Mat downloaded = downloadVideoFromUrl(video_url, temp_filename);
@@ -87,11 +90,35 @@ VideoLivenessAnalysis VideoLivenessDetector::analyzeVideoFromFile(const std::str
     }
     
     try {
+        // Validate file exists and has reasonable size
+        if (!std::filesystem::exists(video_path)) {
+            setFailureReason(analysis, "video_file_not_found");
+            return analysis;
+        }
+        
+        auto file_size = std::filesystem::file_size(video_path);
+        if (file_size < 1024) {
+            setFailureReason(analysis, "video_file_too_small");
+            return analysis;
+        }
+        
         cv::VideoCapture cap(video_path);
         if (!cap.isOpened()) {
             setFailureReason(analysis, "failed_to_open_video_file");
             return analysis;
         }
+        
+        // Additional validation - try to read basic video properties
+        double fps = cap.get(cv::CAP_PROP_FPS);
+        int total_frames = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_COUNT));
+        
+        if (fps <= 0 || total_frames <= 0) {
+            setFailureReason(analysis, "invalid_video_properties");
+            return analysis;
+        }
+        
+        std::cout << "Video file validated successfully: " << video_path 
+                  << " (" << file_size << " bytes, " << total_frames << " frames, " << fps << " FPS)" << std::endl;
         
         return analyzeVideo(cap);
         
@@ -778,6 +805,31 @@ cv::Mat VideoLivenessDetector::downloadVideoFromUrl(const std::string& url, cons
             return cv::Mat();
         }
         
+        // Validate downloaded file size and format
+        if (!std::filesystem::exists(temp_filename)) {
+            std::cerr << "Downloaded file does not exist: " << temp_filename << std::endl;
+            return cv::Mat();
+        }
+        
+        auto file_size = std::filesystem::file_size(temp_filename);
+        if (file_size < 1024) { // Less than 1KB is likely not a valid video
+            std::cerr << "Downloaded file too small (" << file_size << " bytes): " << temp_filename << std::endl;
+            std::filesystem::remove(temp_filename);
+            return cv::Mat();
+        }
+        
+        // Quick validation that OpenCV can open the file before proceeding
+        cv::VideoCapture test_cap(temp_filename);
+        if (!test_cap.isOpened()) {
+            std::cerr << "OpenCV cannot open downloaded video file: " << temp_filename << std::endl;
+            std::filesystem::remove(temp_filename);
+            return cv::Mat();
+        }
+        test_cap.release();
+        
+        std::cout << "Successfully downloaded and validated video file: " << temp_filename 
+                  << " (" << file_size << " bytes)" << std::endl;
+        
         // Return a dummy Mat to indicate success
         // The actual video will be read from the file
         return cv::Mat::ones(1, 1, CV_8UC1);
@@ -798,8 +850,9 @@ VideoLivenessAnalysis VideoLivenessDetector::analyzeSingleVideoWithMediaPipe(con
     }
 
     try {
-        // Create temporary filename
-        std::string temp_filename = "/tmp/gateman_mediapipe_video_" + std::to_string(std::time(nullptr)) + ".mp4";
+        // Create temporary filename with thread ID to avoid collisions
+        std::hash<std::thread::id> hasher;
+        std::string temp_filename = "/tmp/gateman_mediapipe_video_" + std::to_string(std::time(nullptr)) + "_" + std::to_string(hasher(std::this_thread::get_id())) + ".mp4";
 
         // Download video
         cv::Mat downloaded = downloadVideoFromUrl(video_url, temp_filename);
@@ -1323,8 +1376,9 @@ VideoLivenessAnalysis VideoLivenessDetector::analyzeSingleVideoWithOpenCV(const 
     }
 
     try {
-        // Create temporary filename
-        std::string temp_filename = "/tmp/gateman_opencv_video_" + std::to_string(std::time(nullptr)) + ".mp4";
+        // Create temporary filename with thread ID to avoid collisions
+        std::hash<std::thread::id> hasher;
+        std::string temp_filename = "/tmp/gateman_opencv_video_" + std::to_string(std::time(nullptr)) + "_" + std::to_string(hasher(std::this_thread::get_id())) + ".mp4";
 
         // Download video
         cv::Mat downloaded = downloadVideoFromUrl(video_url, temp_filename);
