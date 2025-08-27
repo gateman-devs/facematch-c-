@@ -63,36 +63,31 @@ if(NOT nlohmann_json_FOUND)
     endif()
 endif()
 
-# MediaPipe
+# MediaPipe - Check for actual header availability
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MEDIAPIPE mediapipe)
-if(NOT MEDIAPIPE_FOUND)
-    # Try to find MediaPipe manually
-    find_path(MEDIAPIPE_INCLUDE_DIR mediapipe/framework/api2/node.h 
-        PATHS 
-        /usr/local/include 
-        /usr/include
-        /opt/homebrew/include
-        ${CMAKE_PREFIX_PATH}/include
+
+# Check if MediaPipe headers are actually available
+set(MEDIAPIPE_HEADERS_AVAILABLE FALSE)
+if(MEDIAPIPE_FOUND)
+    find_path(MEDIAPIPE_ACTUAL_INCLUDE_DIR mediapipe/framework/calculator_framework.h
+        PATHS ${MEDIAPIPE_INCLUDE_DIRS}
+        NO_DEFAULT_PATH
     )
-    find_library(MEDIAPIPE_LIB mediapipe 
-        PATHS 
-        /usr/local/lib 
-        /usr/lib
-        /opt/homebrew/lib
-        ${CMAKE_PREFIX_PATH}/lib
-    )
-    
-    if(MEDIAPIPE_INCLUDE_DIR AND MEDIAPIPE_LIB)
-        message(STATUS "MediaPipe found manually: ${MEDIAPIPE_LIB}")
-        set(MEDIAPIPE_LIBRARIES ${MEDIAPIPE_LIB})
-        set(MEDIAPIPE_INCLUDE_DIRS ${MEDIAPIPE_INCLUDE_DIR})
+    if(MEDIAPIPE_ACTUAL_INCLUDE_DIR)
+        set(MEDIAPIPE_HEADERS_AVAILABLE TRUE)
+        message(STATUS "MediaPipe headers found: ${MEDIAPIPE_ACTUAL_INCLUDE_DIR}")
     else()
-        message(WARNING "MediaPipe not found. Video liveness detection will be disabled.")
+        message(WARNING "MediaPipe pkg-config found but headers not available")
         set(MEDIAPIPE_FOUND FALSE)
     endif()
+endif()
+
+if(NOT MEDIAPIPE_FOUND OR NOT MEDIAPIPE_HEADERS_AVAILABLE)
+    message(WARNING "MediaPipe not fully available. Video liveness with FaceMesh will be disabled.")
+    set(MEDIAPIPE_FOUND FALSE)
 else()
-    message(STATUS "MediaPipe found via pkg-config")
+    message(STATUS "MediaPipe fully available with headers")
 endif()
 
 # Include directories
@@ -136,6 +131,9 @@ target_link_libraries(${PROJECT_NAME}
 if(MEDIAPIPE_FOUND AND MEDIAPIPE_LIBRARIES)
     target_link_libraries(${PROJECT_NAME} ${MEDIAPIPE_LIBRARIES})
     target_compile_definitions(${PROJECT_NAME} PRIVATE MEDIAPIPE_AVAILABLE)
+else()
+    message(WARNING "MediaPipe not available - video liveness with FaceMesh will be disabled")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE MEDIAPIPE_NOT_AVAILABLE)
 endif()
 
 # Link Crow if found via find_package

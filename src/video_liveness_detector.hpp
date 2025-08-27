@@ -7,8 +7,8 @@
 #include <string>
 #include <cstring>
 
+// MediaPipe includes and forward declarations
 #ifdef MEDIAPIPE_AVAILABLE
-// MediaPipe includes
 #include "mediapipe/framework/api2/node.h"
 #include "mediapipe/framework/calculator_framework.h"
 #include "mediapipe/framework/formats/image_frame.h"
@@ -19,6 +19,27 @@
 #include "mediapipe/framework/port/status.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#else
+// Forward declarations when MediaPipe is not available
+namespace mediapipe {
+class CalculatorGraph;
+class ImageFrame;
+class NormalizedLandmarkList;
+class Packet;
+struct Timestamp;
+namespace api2 {
+class Node {};
+} // namespace api2
+namespace formats {
+class MatView {};
+} // namespace formats
+} // namespace mediapipe
+
+// Additional forward declarations for absl
+namespace absl {
+template<typename T>
+class unique_ptr {};
+} // namespace absl
 #endif
 
 enum class MovementDirection {
@@ -87,12 +108,20 @@ public:
     
     // Process video from URL
     VideoLivenessAnalysis analyzeVideoFromUrl(const std::string& video_url);
-    
+
     // Process video from local file
     VideoLivenessAnalysis analyzeVideoFromFile(const std::string& video_path);
-    
+
     // Process video from OpenCV VideoCapture
     VideoLivenessAnalysis analyzeVideo(cv::VideoCapture& cap);
+
+#ifdef MEDIAPIPE_AVAILABLE
+    // Process single video with MediaPipe FaceMesh only (no fallbacks)
+    VideoLivenessAnalysis analyzeSingleVideoWithMediaPipe(const std::string& video_url);
+#endif
+    
+    // Process single video with OpenCV-based head pose estimation (fallback)
+    VideoLivenessAnalysis analyzeSingleVideoWithOpenCV(const std::string& video_url);
     
     // Check if detector is initialized
     bool isInitialized() const { return initialized; }
@@ -133,7 +162,7 @@ private:
     cv::Mat getCameraMatrix(const cv::Size& image_size);
     cv::Mat getDistortionCoefficients();
     std::vector<cv::Point2f> getFaceLandmarks(const cv::Mat& frame);
-    bool analyzeMovementPatterns(const std::vector<HeadPoseMovement>& movements, 
+    bool analyzeMovementPatterns(const std::vector<HeadPoseMovement>& movements,
                                 float& yaw_range, float& pitch_range);
     std::vector<DirectionalMovement> extractDirectionalMovements(const std::vector<HeadPoseMovement>& movements);
     std::vector<DirectionalMovement> analyzeMovementSegments(const std::vector<HeadPoseMovement>& movements);
@@ -143,9 +172,27 @@ private:
     std::string directionToString(MovementDirection direction);
     float calculateConfidence(const VideoLivenessAnalysis& analysis);
     void setFailureReason(VideoLivenessAnalysis& analysis, const std::string& reason);
-    
+
 #ifdef MEDIAPIPE_AVAILABLE
-    HeadPoseMovement calculateHeadPoseMediaPipe(const cv::Mat& frame, float timestamp);
+    // MediaPipe-specific helper methods
+    VideoLivenessAnalysis analyzeVideoWithMediaPipeFaceMesh(const std::string& video_path);
+    void detectFirstMajorMovement(const std::vector<HeadPoseMovement>& movements,
+                                 DirectionalMovement& first_movement,
+                                 VideoLivenessAnalysis& analysis);
+    HeadPoseMovement calculateHeadPoseMediaPipeFaceMesh(const cv::Mat& frame, float timestamp);
+    HeadPoseMovement calculateHeadPoseFromFaceMesh(const mediapipe::NormalizedLandmarkList& landmarks,
+                                                  const cv::Size& image_size);
+    bool setupMediaPipeGraphForAnalysis();
+#endif
+
+    // OpenCV-specific helper methods for fallback
+    VideoLivenessAnalysis analyzeVideoWithOpenCVOptimized(const std::string& video_path);
+    void detectFirstMajorMovementOpenCV(const std::vector<HeadPoseMovement>& movements,
+                                       DirectionalMovement& first_movement,
+                                       VideoLivenessAnalysis& analysis);
+    
+HeadPoseMovement calculateHeadPoseMediaPipe(const cv::Mat& frame, float timestamp);
+#ifdef MEDIAPIPE_AVAILABLE
     bool setupMediaPipeGraph();
 #endif
 };

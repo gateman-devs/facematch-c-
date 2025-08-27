@@ -45,6 +45,7 @@ private:
     crow::response handleFaceComparison(const crow::request& req);
     crow::response handleLivenessCheck(const crow::request& req);
     crow::response handleVideoLivenessCheck(const crow::request& req);
+    crow::response handleSingleVideoLivenessCheck(const crow::request& req);
     crow::response handleHealthCheck(const crow::request& req);
     
     // Helper methods
@@ -59,6 +60,7 @@ private:
     bool validateComparisonRequest(const json& request_data);
     bool validateLivenessRequest(const json& request_data);
     bool validateVideoLivenessRequest(const json& request_data);
+    bool validateSingleVideoLivenessRequest(const json& request_data);
     
     // Timing utility
     class Timer {

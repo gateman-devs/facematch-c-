@@ -86,6 +86,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  GET  /health           - Health check" << std::endl;
         std::cout << "  POST /compare-faces    - Compare two faces" << std::endl;
         std::cout << "  POST /liveness-check   - Check face liveness" << std::endl;
+        std::cout << "  POST /liveness/video   - Multi-step video liveness check" << std::endl;
+        std::cout << "  POST /video/liveness   - Single video liveness with MediaPipe FaceMesh" << std::endl;
         std::cout << "\nPress Ctrl+C to stop the server." << std::endl;
         
         // Start server (blocking call)

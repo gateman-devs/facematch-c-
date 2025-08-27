@@ -40,15 +40,15 @@ bool WebServer::initialize(const std::string& models_path_param) {
             return false;
         }
         
-        // Initialize liveness detector with error handling
+        // Initialize liveness detector with error handling (optional)
         try {
             if (!liveness_detector->initialize(shape_predictor_model)) {
-                std::cerr << "Failed to initialize liveness detector" << std::endl;
-                return false;
+                std::cerr << "Warning: Failed to initialize liveness detector - some features may not be available" << std::endl;
+                // Don't return false - continue without liveness detector
             }
         } catch (const std::exception& e) {
-            std::cerr << "Exception during liveness detector initialization: " << e.what() << std::endl;
-            return false;
+            std::cerr << "Warning: Exception during liveness detector initialization: " << e.what() << std::endl;
+            // Don't return false - continue without liveness detector
         }
         
         // Initialize video liveness detector with error handling
@@ -88,6 +88,12 @@ bool WebServer::initialize(const std::string& models_path_param) {
         CROW_ROUTE(app, "/liveness/video").methods("POST"_method)
         ([this](const crow::request& req) {
             return handleVideoLivenessCheck(req);
+        });
+
+        // Single video liveness check endpoint (MediaPipe FaceMesh only)
+        CROW_ROUTE(app, "/video/liveness").methods("POST"_method)
+        ([this](const crow::request& req) {
+            return handleSingleVideoLivenessCheck(req);
         });
         
         initialized = true;
@@ -268,6 +274,93 @@ crow::response WebServer::handleLivenessCheck(const crow::request& req) {
     }
 }
 
+crow::response WebServer::handleSingleVideoLivenessCheck(const crow::request& req) {
+    Timer timer;
+
+    try {
+        // Parse request body
+        json request_data = parseRequestBody(req.body);
+
+        if (!validateSingleVideoLivenessRequest(request_data)) {
+            return crow::response(400, createErrorResponse("Invalid request format. Required: video_url").dump());
+        }
+
+        std::string video_url = request_data["video_url"];
+
+        // Check if video liveness detector is available
+        if (!video_liveness_detector || !video_liveness_detector->isInitialized()) {
+            return crow::response(503, createErrorResponse("Video liveness detection not available").dump());
+        }
+
+        // Perform single video liveness analysis
+        // Try MediaPipe first if available, fallback to OpenCV-based analysis
+        VideoLivenessAnalysis analysis;
+        
+#ifdef MEDIAPIPE_AVAILABLE
+        analysis = video_liveness_detector->analyzeSingleVideoWithMediaPipe(video_url);
+#else
+        // Use OpenCV-based analysis for head movement detection
+        analysis = video_liveness_detector->analyzeSingleVideoWithOpenCV(video_url);
+#endif
+
+        // Create response with detailed analysis
+        json response_data = {
+            {"is_live", analysis.is_live},
+            {"confidence", analysis.confidence},
+            {"processing_time_ms", timer.elapsed_ms()},
+            {"video_duration_seconds", analysis.duration_seconds},
+            {"frame_count", analysis.frame_count},
+            {"has_sufficient_movement", analysis.has_sufficient_movement},
+            {"yaw_range", analysis.yaw_range},
+            {"pitch_range", analysis.pitch_range},
+            {"directional_movements", json::array()},
+            {"anti_spoofing_checks", {
+                {"passed", !analysis.has_failure},
+                {"failure_reason", analysis.has_failure ? std::string(analysis.failure_reason) : ""}
+            }},
+            {"error", nullptr}
+        };
+
+        // Add directional movements if any were detected
+        for (const auto& movement : analysis.directional_movements) {
+            std::string direction_str;
+            switch (movement.direction) {
+                case MovementDirection::LEFT: direction_str = "left"; break;
+                case MovementDirection::RIGHT: direction_str = "right"; break;
+                case MovementDirection::UP: direction_str = "up"; break;
+                case MovementDirection::DOWN: direction_str = "down"; break;
+                default: direction_str = "none"; break;
+            }
+
+            response_data["directional_movements"].push_back({
+                {"direction", direction_str},
+                {"magnitude", movement.magnitude},
+                {"start_time", movement.start_time},
+                {"end_time", movement.end_time}
+            });
+        }
+
+        // Add movement counts
+        response_data["movement_counts"] = {
+            {"left_movements", analysis.left_movements},
+            {"right_movements", analysis.right_movements},
+            {"up_movements", analysis.up_movements},
+            {"down_movements", analysis.down_movements}
+        };
+
+        crow::response res(200, createSuccessResponse(response_data).dump());
+        res.add_header("Access-Control-Allow-Origin", "*");
+        res.add_header("Content-Type", "application/json");
+        return res;
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error in single video liveness check: " << e.what() << std::endl;
+        json error_response = createErrorResponse("Internal server error");
+        error_response["processing_time_ms"] = timer.elapsed_ms();
+        return crow::response(500, error_response.dump());
+    }
+}
+
 crow::response WebServer::handleVideoLivenessCheck(const crow::request& req) {
     Timer timer;
     
@@ -430,7 +523,7 @@ bool WebServer::validateVideoLivenessRequest(const json& request_data) {
     if (!request_data.is_array() || request_data.size() != 4) {
         return false;
     }
-    
+
     // Validate each object in the array
     for (const auto& video_obj : request_data) {
         if (!video_obj.is_object() ||
@@ -440,8 +533,16 @@ bool WebServer::validateVideoLivenessRequest(const json& request_data) {
             return false;
         }
     }
-    
+
     return true;
+}
+
+bool WebServer::validateSingleVideoLivenessRequest(const json& request_data) {
+    // Check if request_data is an object with video_url
+    return request_data.is_object() &&
+           request_data.contains("video_url") &&
+           request_data["video_url"].is_string() &&
+           !request_data["video_url"].get<std::string>().empty();
 }
 
 void WebServer::setupCORS() {
