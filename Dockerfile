@@ -18,10 +18,11 @@ COPY CMakeLists.txt ./
 COPY src/ ./src/
 COPY download_models.sh ./
 
-# Install missing build tools (cmake, build-essential)
+# Install missing build tools (cmake, build-essential, pkg-config)
 RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Install curl for model downloads (ensure it's available)
