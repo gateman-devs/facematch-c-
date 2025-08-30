@@ -1,42 +1,49 @@
+# Git
+.git
+.gitignore
+
 # Build artifacts
 build/
 *.o
 *.so
 *.a
-
-# Git
-.git/
-.gitignore
-
-# Documentation
-README.md
-*.md
-
-# Scripts (not needed in container)
-setup_environment.sh
-setup_redis.sh
-startup_local.sh
-test_*.sh
-
-# Environment files
-env.example
-.env
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
+*.exe
 
 # Logs
 logs/
 *.log
 
+# Documentation
+README.md
+*.md
+
+# Test files
+test_*.sh
+test_*.cpp
+simple_test.cpp
+
+# Docker files (except Dockerfile)
+docker-compose.yml
+Dockerfile.test
+
+# Environment files
+.env
+env.example
+
+# Scripts
+setup_*.sh
+startup_*.sh
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
 # Temporary files
-tmp/
-temp/
+*.tmp
+*.temp

@@ -1,67 +1,22 @@
 # ============================================
-# ML Face Service - Multi-stage Dockerfile
+# ML Face Service - Optimized Multi-stage Dockerfile
 # ============================================
 
-# Build stage - Install dependencies and build the application
-FROM ubuntu:22.04 AS builder
+# Build stage - Use pre-built base image with all dependencies
+FROM ghcr.io/emekarr/gateman-face-base-image:latest AS builder
 
 # Set environment variables for non-interactive installation
 ENV DEBIAN_FRONTEND=noninteractive \
-    CMAKE_BUILD_TYPE=Release
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    pkg-config \
-    curl \
-    wget \
-    bzip2 \
-    unzip \
-    libssl-dev \
-    libcurl4-openssl-dev \
-    libhiredis-dev \
-    redis-server \
-    libtbb-dev \
-    libopencv-dev \
-    libopencv-contrib-dev \
-    python3-opencv \
-    libdlib-dev \
-    libdlib19 \
-    nlohmann-json3-dev \
-    libasio-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Boost libraries (required by Crow/ASIO)
-RUN apt-get update && apt-get install -y \
-    libboost-system-dev \
-    libboost-thread-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Crow HTTP framework from source
-RUN git clone https://github.com/CrowCpp/Crow.git /tmp/crow && \
-    cd /tmp/crow && \
-    mkdir -p build && cd build && \
-    cmake .. -DCROW_BUILD_EXAMPLES=OFF -DCROW_BUILD_TESTS=OFF && \
-    make -j$(nproc) && \
-    make install && \
-    rm -rf /tmp/crow
+    CMAKE_BUILD_TYPE=Release \
+    MAKEFLAGS="-j$(nproc)"
 
 # Set working directory
 WORKDIR /app
 
-# Copy source code
+# Copy source code and models in separate layers for better caching
 COPY CMakeLists.txt ./
 COPY src/ ./src/
-
-# Copy model download script
-COPY download_models.sh ./
-
-# Create models directory and download ML models
-RUN mkdir -p models && \
-    chmod +x download_models.sh && \
-    ./download_models.sh
+COPY models/ ./models/
 
 # Build the application
 RUN mkdir -p build && cd build && \
@@ -91,6 +46,10 @@ RUN apt-get update && apt-get install -y \
     redis-server \
     libboost-system1.74.0 \
     libboost-thread1.74.0 \
+    libblas3 \
+    liblapack3 \
+    libatlas3-base \
+    libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user for security
