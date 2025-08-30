@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     bzip2 \
     libcurl4-openssl-dev \
+    libhiredis-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Download models during build
