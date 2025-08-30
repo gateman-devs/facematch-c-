@@ -2,6 +2,7 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 
 // Define the static constexpr array
 constexpr ChallengeDirection ChallengeGenerator::DIRECTIONS[];
@@ -16,21 +17,23 @@ Challenge ChallengeGenerator::generateChallenge(int ttl_seconds) {
     challenge.id = generateChallengeId();
     challenge.ttl_seconds = ttl_seconds;
     challenge.created_at = std::chrono::system_clock::now();
-    
-    // Generate 4 random directions
-    challenge.directions.reserve(4);
-    for (int i = 0; i < 4; ++i) {
-        int direction_index = direction_dist(rng);
-        challenge.directions.push_back(DIRECTIONS[direction_index]);
-    }
-    
+
+    // Create a vector with all available directions
+    std::vector<ChallengeDirection> all_directions(DIRECTIONS, DIRECTIONS + NUM_DIRECTIONS);
+
+    // Shuffle the directions to get a random permutation
+    std::shuffle(all_directions.begin(), all_directions.end(), rng);
+
+    // Use all shuffled directions (guaranteed to be unique)
+    challenge.directions = std::move(all_directions);
+
     std::cout << "Generated challenge " << challenge.id << " with directions: ";
     for (size_t i = 0; i < challenge.directions.size(); ++i) {
         if (i > 0) std::cout << ", ";
         std::cout << Challenge::directionToString(challenge.directions[i]);
     }
     std::cout << std::endl;
-    
+
     return challenge;
 }
 

@@ -181,7 +181,7 @@ make -j$(nproc)
 
 ### Docker
 ```bash
-# Build and run
+# Build and run (includes Redis)
 docker-compose up --build
 
 # Run in background
@@ -189,7 +189,34 @@ docker-compose up -d
 
 # View logs
 docker-compose logs -f
+
+# Test the Docker deployment
+./test_docker.sh
+
+# Stop services
+docker-compose down
+
+# Stop and remove volumes (Redis data)
+docker-compose down -v
 ```
+
+#### Manual Docker Commands
+```bash
+# Build the image
+docker build -t gateman-face .
+
+# Run with Redis
+docker run -d --name redis redis:7-alpine
+docker run -d -p 8080:8080 --link redis:redis -e REDIS_HOST=redis gateman-face
+
+# Run standalone (without Redis - challenge system disabled)
+docker run -d -p 8080:8080 gateman-face
+```
+
+#### Docker Environment Variables
+- `REDIS_HOST`: Redis hostname (default: none, disables challenge system)
+- `REDIS_PORT`: Redis port (default: 6379)
+- `REDIS_PASSWORD`: Redis password (optional)
 
 ## Testing
 

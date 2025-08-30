@@ -3,7 +3,24 @@ build/
 *.o
 *.so
 *.a
-MLFaceService
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Scripts (not needed in container)
+setup_environment.sh
+setup_redis.sh
+startup_local.sh
+test_*.sh
+
+# Environment files
+env.example
+.env
 
 # IDE and editor files
 .vscode/
@@ -12,17 +29,9 @@ MLFaceService
 *.swo
 *~
 
-# Version control
-.git/
-.gitignore
-
-# Documentation
-README.md
-docs/
-
-# Scripts (copied separately)
-setup_environment.sh
-startup_local.sh
+# OS files
+.DS_Store
+Thumbs.db
 
 # Logs
 logs/
@@ -31,34 +40,3 @@ logs/
 # Temporary files
 tmp/
 temp/
-.tmp/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Docker files
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# Environment files
-.env
-.env.local
-.env.production
-
-# Test files
-tests/
-test_*
-
-# Example files
-examples/
-samples/
-
-# Large model files will be downloaded during build
-models/*.dat
-models/*.bin
-
-# Cache directories
-.cache/
-__pycache__/
