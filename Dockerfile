@@ -13,10 +13,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Set working directory
 WORKDIR /app
 
-# Copy source code and models in separate layers for better caching
+# Copy source code and build scripts in separate layers for better caching
 COPY CMakeLists.txt ./
 COPY src/ ./src/
-COPY models/ ./models/
+COPY download_models.sh ./
+
+# Download models during build
+RUN chmod +x download_models.sh && \
+    ./download_models.sh
 
 # Build the application
 RUN mkdir -p build && cd build && \
