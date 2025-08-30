@@ -25,8 +25,12 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Install curl for model downloads (ensure it's available)
-RUN apt-get update && apt-get install -y curl bzip2 && rm -rf /var/lib/apt/lists/*
+# Install curl development libraries and tools for model downloads
+RUN apt-get update && apt-get install -y \
+    curl \
+    bzip2 \
+    libcurl4-openssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Download models during build
 RUN chmod +x download_models.sh && \
