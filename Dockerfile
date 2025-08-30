@@ -18,6 +18,9 @@ COPY CMakeLists.txt ./
 COPY src/ ./src/
 COPY download_models.sh ./
 
+# Install curl for model downloads (ensure it's available)
+RUN apt-get update && apt-get install -y curl bzip2 && rm -rf /var/lib/apt/lists/*
+
 # Download models during build
 RUN chmod +x download_models.sh && \
     ./download_models.sh
