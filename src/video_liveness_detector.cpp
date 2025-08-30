@@ -174,7 +174,7 @@ VideoLivenessAnalysis VideoLivenessDetector::analyzeVideo(cv::VideoCapture& cap)
         analysis.frame_count = frame_count;
         
         // Check if we have enough data
-        if (analysis.pose_movements.size() < MIN_FRAMES / skip_frames) {
+        if (static_cast<int>(analysis.pose_movements.size()) < MIN_FRAMES / skip_frames) {
             setFailureReason(analysis, "insufficient_face_detection");
             return analysis;
         }
@@ -573,18 +573,28 @@ MovementDirection VideoLivenessDetector::detectMovementInSegment(const std::vect
         float up_similarity = calculatePatternSimilarity(yaw_range, pitch_range, MovementDirection::UP);
         float down_similarity = calculatePatternSimilarity(yaw_range, pitch_range, MovementDirection::DOWN);
         
-        // Consider the direction of movement
-        // FIXED: Corrected pitch angle interpretation for coordinate system
-        // Negative pitch_delta = looking down (nose tilts down)
-        // Positive pitch_delta = looking up (nose tilts up)
-        if (pitch_delta < -1.0f && down_similarity > PATTERN_SIMILARITY) {
+        // Enhanced pitch direction detection with improved thresholds
+        // COORDINATE SYSTEM: Pitch angle interpretation
+        // Positive pitch_delta = looking down (nose tilts down, head moves down)
+        // Negative pitch_delta = looking up (nose tilts up, head moves up)
+        
+        // Primary detection: Use pitch delta with improved thresholds
+        const float MIN_PITCH_DELTA_DOWN = 2.5f;   // Minimum delta for down movement
+        const float MIN_PITCH_DELTA_UP = -2.5f;    // Minimum delta for up movement
+        
+        if (pitch_delta > MIN_PITCH_DELTA_DOWN && pitch_range >= MIN_VERTICAL_RANGE && down_similarity > PATTERN_SIMILARITY) {
             return MovementDirection::DOWN;
-        } else if (pitch_delta > 1.0f && up_similarity > PATTERN_SIMILARITY) {
+        } else if (pitch_delta < MIN_PITCH_DELTA_UP && pitch_range >= MIN_VERTICAL_RANGE && up_similarity > PATTERN_SIMILARITY) {
             return MovementDirection::UP;
-        } else if (down_similarity > up_similarity && down_similarity > PATTERN_SIMILARITY) {
-            return MovementDirection::DOWN;
-        } else if (up_similarity > PATTERN_SIMILARITY) {
-            return MovementDirection::UP;
+        }
+        
+        // Fallback detection: Use pattern similarity when delta is ambiguous
+        else if (pitch_range >= MIN_VERTICAL_RANGE) {
+            if (down_similarity > up_similarity && down_similarity > PATTERN_SIMILARITY) {
+                return MovementDirection::DOWN;
+            } else if (up_similarity > PATTERN_SIMILARITY) {
+                return MovementDirection::UP;
+            }
         }
     }
     
@@ -1074,9 +1084,9 @@ void VideoLivenessDetector::detectFirstMajorMovement(const std::vector<HeadPoseM
     baseline_yaw /= baseline_frames;
     baseline_pitch /= baseline_frames;
 
-    // Look for first major movement deviation from baseline
-    const float MAJOR_MOVEMENT_THRESHOLD_YAW = 8.0f;   // degrees
-    const float MAJOR_MOVEMENT_THRESHOLD_PITCH = 8.0f; // degrees
+    // Look for first major movement deviation from baseline - Enhanced for up/down detection
+    const float MAJOR_MOVEMENT_THRESHOLD_YAW = 6.0f;   // degrees (slightly reduced for better sensitivity)
+    const float MAJOR_MOVEMENT_THRESHOLD_PITCH = 5.0f; // degrees (reduced for up/down movements)
     const int MIN_MOVEMENT_DURATION = 3; // frames
 
     for (size_t i = baseline_frames; i < movements.size() - MIN_MOVEMENT_DURATION; ++i) {
@@ -1565,7 +1575,7 @@ VideoLivenessAnalysis VideoLivenessDetector::analyzeVideoWithOpenCVOptimized(con
 
 void VideoLivenessDetector::detectFirstMajorMovementOpenCV(const std::vector<HeadPoseMovement>& movements,
                                                           DirectionalMovement& first_movement,
-                                                          VideoLivenessAnalysis& analysis) {
+                                                          VideoLivenessAnalysis& /* analysis */) {
     if (movements.size() < 5) {
         return;
     }
@@ -1581,9 +1591,9 @@ void VideoLivenessDetector::detectFirstMajorMovementOpenCV(const std::vector<Hea
     baseline_yaw /= baseline_frames;
     baseline_pitch /= baseline_frames;
 
-    // Look for first major movement deviation from baseline
-    const float MAJOR_MOVEMENT_THRESHOLD_YAW = 6.0f;   // degrees (slightly lower for OpenCV)
-    const float MAJOR_MOVEMENT_THRESHOLD_PITCH = 6.0f; // degrees
+    // Look for first major movement deviation from baseline - Enhanced for up/down detection
+    const float MAJOR_MOVEMENT_THRESHOLD_YAW = 5.0f;   // degrees (optimized for OpenCV)
+    const float MAJOR_MOVEMENT_THRESHOLD_PITCH = 4.0f; // degrees (reduced for better up/down sensitivity)
     const int MIN_MOVEMENT_DURATION = 2; // frames (shorter for OpenCV)
 
     for (size_t i = baseline_frames; i < movements.size() - MIN_MOVEMENT_DURATION; ++i) {
@@ -1599,7 +1609,7 @@ void VideoLivenessDetector::detectFirstMajorMovementOpenCV(const std::vector<Hea
 
             for (int j = 0; j < MIN_MOVEMENT_DURATION; ++j) {
                 if (i + j >= movements.size()) break;
-                
+
                 float current_yaw_dev = std::abs(movements[i + j].yaw_angle - baseline_yaw);
                 float current_pitch_dev = std::abs(movements[i + j].pitch_angle - baseline_pitch);
 
