@@ -5,9 +5,10 @@ project(MLFaceService VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Optimization flags
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG")
+# Optimization flags - Use conservative optimization to minimize memory usage
+# Keep exceptions and RTTI enabled as they are used extensively in the code
+set(CMAKE_CXX_FLAGS_RELEASE "-O1 -DNDEBUG -pipe -fomit-frame-pointer")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG -pipe")
 
 # Default to Release build
 if(NOT CMAKE_BUILD_TYPE)
@@ -74,9 +75,22 @@ endif()
 find_package(nlohmann_json QUIET)
 if(NOT nlohmann_json_FOUND)
     message(STATUS "nlohmann/json not found via find_package, checking for manual installation")
-    find_path(NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp PATHS /usr/local/include /usr/include)
+    # Ubuntu package installs to /usr/include/nlohmann/json.hpp
+    find_path(NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp
+        PATHS
+            /usr/include
+            /usr/local/include
+            /opt/local/include
+    )
     if(NOT NLOHMANN_JSON_INCLUDE_DIR)
-        message(FATAL_ERROR "nlohmann/json not found. Please install nlohmann/json library.")
+        message(STATUS "Searching for nlohmann/json.hpp in common locations...")
+        execute_process(COMMAND find /usr -name "json.hpp" 2>/dev/null OUTPUT_VARIABLE FIND_OUTPUT)
+        if(FIND_OUTPUT)
+            message(STATUS "Found json.hpp files: ${FIND_OUTPUT}")
+        endif()
+        message(FATAL_ERROR "nlohmann/json not found. Please install nlohmann/json library (nlohmann-json3-dev package).")
+    else()
+        message(STATUS "nlohmann/json found at: ${NLOHMANN_JSON_INCLUDE_DIR}")
     endif()
 endif()
 
@@ -118,6 +132,7 @@ endif()
 
 if(NLOHMANN_JSON_INCLUDE_DIR)
     include_directories(${NLOHMANN_JSON_INCLUDE_DIR})
+    message(STATUS "Added nlohmann/json include directory: ${NLOHMANN_JSON_INCLUDE_DIR}")
 endif()
 
 if(MEDIAPIPE_INCLUDE_DIRS)

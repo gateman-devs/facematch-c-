@@ -18,57 +18,52 @@ COPY CMakeLists.txt ./
 COPY src/ ./src/
 COPY download_models.sh ./
 
-# Install missing build tools (cmake, build-essential, pkg-config)
+# Install missing build tools and development headers that are not in the base image
 RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
     pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install curl development libraries and tools for model downloads
-RUN apt-get update && apt-get install -y \
-    curl \
-    bzip2 \
+    libssl-dev \
     libcurl4-openssl-dev \
     libhiredis-dev \
+    nlohmann-json3-dev \
+    libasio-dev \
+    libblas-dev \
+    liblapack-dev \
+    libatlas-base-dev \
+    libsqlite3-dev \
+    libboost-system-dev \
+    libboost-thread-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff-dev \
+    libtbb-dev \
+    libopencv-dev \
+    libopencv-contrib-dev \
+    libdlib-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Download models during build
-RUN chmod +x download_models.sh && \
-    ./download_models.sh
+# Copy models from source (already downloaded)
+COPY models/ ./models/
 
-# Build the application
+# Build the application with single-threaded compilation to avoid memory exhaustion
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make -j$(nproc)
+    make -j1
 
 # ============================================
-# Runtime stage - Minimal image for running the service
+# Runtime stage - Use base image with all dependencies
 # ============================================
 
-FROM ubuntu:22.04 AS runtime
+FROM ghcr.io/emekarr/gateman-face-base-image:latest AS runtime
 
-# Install only runtime dependencies
+# Install missing runtime dependencies (redis-server and FFmpeg libs are not in base image)
 RUN apt-get update && apt-get install -y \
-    libcurl4 \
-    curl \
-    libssl3 \
-    libhiredis0.14 \
-    libtbb2 \
-    libopencv-core4.5d \
-    libopencv-imgproc4.5d \
-    libopencv-imgcodecs4.5d \
-    libopencv-highgui4.5d \
-    libopencv-objdetect4.5d \
-    libopencv-calib3d4.5d \
-    libdlib19 \
     redis-server \
-    libboost-system1.74.0 \
-    libboost-thread1.74.0 \
-    libblas3 \
-    liblapack3 \
-    libatlas3-base \
-    libsqlite3-0 \
+    libavcodec58 \
+    libavformat58 \
+    libavutil56 \
+    libswscale5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user for security
