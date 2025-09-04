@@ -41,10 +41,12 @@ RUN apt-get update && apt-get install -y \
     libopencv-dev \
     libopencv-contrib-dev \
     libdlib-dev \
+    curl \
+    bzip2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy models from source (already downloaded)
-COPY models/ ./models/
+# Download models fresh during build
+RUN chmod +x download_models.sh && ./download_models.sh
 
 # Build the application with single-threaded compilation to avoid memory exhaustion
 RUN mkdir -p build && cd build && \
