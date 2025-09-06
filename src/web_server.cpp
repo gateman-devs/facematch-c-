@@ -69,7 +69,10 @@ bool WebServer::initialize(const std::string& models_path_param) {
         // Initialize Redis cache
         try {
             // Get Redis configuration from REDIS_URL environment variable
-            std::string redis_url = std::getenv("REDIS_URL") ? std::getenv("REDIS_URL") : "redis://127.0.0.1:6379";
+            std::string redis_url = std::getenv("REDIS_URL") ? std::getenv("REDIS_URL") : "redis://valkey:6379";
+
+            // Log the Redis URL being used
+            std::cout << "Connecting to Redis using URL: " << redis_url << std::endl;
 
             // Parse Redis URL to extract host, port, and password
             std::string redis_host;
