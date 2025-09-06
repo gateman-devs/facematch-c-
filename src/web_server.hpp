@@ -57,11 +57,12 @@ private:
     
     // Helper methods
     json parseRequestBody(const std::string& body);
-    std::pair<cv::Mat, cv::Mat> loadImagesConcurrently(const std::string& image1_input, 
+    std::pair<cv::Mat, cv::Mat> loadImagesConcurrently(const std::string& image1_input,
                                                        const std::string& image2_input);
     json createErrorResponse(const std::string& error_message, int status_code = 400);
     json createSuccessResponse(const json& data);
     crow::response createResponse(int status_code, const json& data);
+    void parseRedisUrl(const std::string& redis_url, std::string& host, int& port, std::string& password);
     
     // Validation methods
     bool validateComparisonRequest(const json& request_data);

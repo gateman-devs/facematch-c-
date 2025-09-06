@@ -68,11 +68,16 @@ bool WebServer::initialize(const std::string& models_path_param) {
         
         // Initialize Redis cache
         try {
-            // Get Redis configuration from environment variables
-            std::string redis_host = std::getenv("REDIS_HOST") ? std::getenv("REDIS_HOST") : "127.0.0.1";
-            int redis_port = std::getenv("REDIS_PORT") ? std::atoi(std::getenv("REDIS_PORT")) : 6379;
-            std::string redis_password = std::getenv("REDIS_PASSWORD") ? std::getenv("REDIS_PASSWORD") : "";
-            
+            // Get Redis configuration from REDIS_URL environment variable
+            std::string redis_url = std::getenv("REDIS_URL") ? std::getenv("REDIS_URL") : "redis://127.0.0.1:6379";
+
+            // Parse Redis URL to extract host, port, and password
+            std::string redis_host;
+            int redis_port = 6379;
+            std::string redis_password = "";
+
+            parseRedisUrl(redis_url, redis_host, redis_port, redis_password);
+
             std::cout << "Attempting to connect to Redis at " << redis_host << ":" << redis_port << std::endl;
             
             if (!redis_cache->initialize(redis_host, redis_port, redis_password)) {
@@ -426,6 +431,66 @@ json WebServer::parseRequestBody(const std::string& body) {
         throw std::runtime_error("Invalid JSON in request body");
     }
 }
+
+void WebServer::parseRedisUrl(const std::string& redis_url, std::string& host, int& port, std::string& password) {
+    // Default values
+    host = "127.0.0.1";
+    port = 6379;
+    password = "";
+
+    // Parse Redis URL format: redis://[username:][password@]host[:port][/db]
+    std::string url = redis_url;
+
+    // Remove redis:// prefix
+    if (url.find("redis://") == 0) {
+        url = url.substr(8);
+    } else if (url.find("rediss://") == 0) {
+        url = url.substr(9); // rediss:// for SSL
+    }
+
+    // Remove database part if present (/db)
+    size_t db_pos = url.find('/');
+    if (db_pos != std::string::npos) {
+        url = url.substr(0, db_pos);
+    }
+
+    // Parse authentication part
+    size_t at_pos = url.find('@');
+    if (at_pos != std::string::npos) {
+        std::string auth_part = url.substr(0, at_pos);
+        url = url.substr(at_pos + 1);
+
+        // Parse username:password or :password
+        size_t colon_pos = auth_part.find(':');
+        if (colon_pos != std::string::npos) {
+            password = auth_part.substr(colon_pos + 1);
+        } else {
+            // No colon found, treat whole auth_part as password
+            password = auth_part;
+        }
+    }
+
+    // Parse host:port
+    size_t colon_pos = url.find(':');
+    if (colon_pos != std::string::npos) {
+        host = url.substr(0, colon_pos);
+        try {
+            port = std::stoi(url.substr(colon_pos + 1));
+        } catch (const std::exception&) {
+            // Invalid port, keep default
+            port = 6379;
+        }
+    } else {
+        // No port specified
+        host = url;
+    }
+
+    // Handle IPv6 addresses in brackets
+    if (!host.empty() && host[0] == '[' && host.back() == ']') {
+        host = host.substr(1, host.length() - 2);
+    }
+}
+
 
 std::pair<cv::Mat, cv::Mat> WebServer::loadImagesConcurrently(const std::string& image1_input, 
                                                              const std::string& image2_input) {
