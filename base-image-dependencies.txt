@@ -42,6 +42,7 @@ libblas3
 liblapack3
 libatlas3-base
 libsqlite3-0
+opencv-data
 
 ## Build Tools
 curl

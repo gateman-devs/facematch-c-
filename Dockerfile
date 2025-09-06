@@ -66,6 +66,7 @@ RUN apt-get update && apt-get install -y \
     libavformat58 \
     libavutil56 \
     libswscale5 \
+    opencv-data \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user for security
