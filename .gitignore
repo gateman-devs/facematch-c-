@@ -1,5 +1,6 @@
 # Build artifacts
 build/
+build_lightweight/
 *.o
 *.a
 *.so

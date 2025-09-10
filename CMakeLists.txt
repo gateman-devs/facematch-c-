@@ -15,19 +15,15 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${CURL_INCLUDE_DIRS})
 include_directories(${CMAKE_SOURCE_DIR})
 
-# Test executables
+# Test executable
 add_executable(test_lightweight
     test_lightweight_simple.cpp
     src/lightweight/lightweight_video_detector_simple.cpp
 )
 
-add_executable(diagnostic_test
-    diagnostic_test.cpp
-    src/lightweight/lightweight_video_detector_simple.cpp
-)
-
-add_executable(optimized_test
-    optimized_test.cpp
+# Lightweight server executable
+add_executable(lightweight_server
+    lightweight_server.cpp
     src/lightweight/lightweight_video_detector_simple.cpp
 )
 
@@ -38,13 +34,7 @@ target_link_libraries(test_lightweight
     Threads::Threads
 )
 
-target_link_libraries(diagnostic_test
-    ${OpenCV_LIBS}
-    ${CURL_LIBRARIES}
-    Threads::Threads
-)
-
-target_link_libraries(optimized_test
+target_link_libraries(lightweight_server
     ${OpenCV_LIBS}
     ${CURL_LIBRARIES}
     Threads::Threads

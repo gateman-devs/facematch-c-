@@ -19,7 +19,6 @@ README.md
 
 # Test files
 test_*.sh
-test_*.cpp
 simple_test.cpp
 
 # Docker files (except Dockerfile)
@@ -31,8 +30,7 @@ Dockerfile.test
 env.example
 
 # Scripts
-setup_*.sh
-startup_*.sh
+startup_local.sh
 
 # IDE files
 .vscode/

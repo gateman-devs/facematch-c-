@@ -1,9 +1,10 @@
 # ============================================
-# ML Face Service - Optimized Multi-stage Dockerfile
+# Lightweight Face Service - Dockerfile
+# OpenCV-only implementation (no heavy ML models)
 # ============================================
 
-# Build stage - Use pre-built base image with all dependencies
-FROM ghcr.io/emekarr/gateman-face-base-image:latest AS builder
+# Build stage - Lightweight dependencies only
+FROM ubuntu:22.04 AS builder
 
 # Set environment variables for non-interactive installation
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -13,60 +14,59 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Set working directory
 WORKDIR /app
 
-# Copy source code and build scripts in separate layers for better caching
-COPY CMakeLists.txt ./
-COPY src/ ./src/
-COPY download_models.sh ./
-
-# Install missing build tools and development headers that are not in the base image
+# Install only essential build dependencies (no heavy ML libraries)
 RUN apt-get update && apt-get install -y \
-    cmake \
     build-essential \
+    cmake \
     pkg-config \
+    git \
+    curl \
+    wget \
     libssl-dev \
     libcurl4-openssl-dev \
-    libhiredis-dev \
-    nlohmann-json3-dev \
-    libasio-dev \
-    libblas-dev \
-    liblapack-dev \
-    libatlas-base-dev \
-    libsqlite3-dev \
-    libboost-system-dev \
-    libboost-thread-dev \
-    libpng-dev \
-    libjpeg-dev \
-    libtiff-dev \
-    libtbb-dev \
+    # OpenCV core libraries only (no contrib/extra modules)
     libopencv-dev \
-    libopencv-contrib-dev \
-    libdlib-dev \
-    curl \
-    bzip2 \
+    libopencv-core-dev \
+    libopencv-imgproc-dev \
+    libopencv-imgcodecs-dev \
+    libopencv-video-dev \
+    libopencv-videoio-dev \
+    # Threading support
+    libtbb-dev \
+    # Clean up apt cache
     && rm -rf /var/lib/apt/lists/*
 
-# Download models fresh during build
-RUN chmod +x download_models.sh && ./download_models.sh
+# Copy source code and build configuration
+COPY CMakeLists.txt ./
+COPY src/lightweight/ ./src/lightweight/
+COPY *.cpp ./
 
-# Build the application with single-threaded compilation to avoid memory exhaustion
-RUN mkdir -p build && cd build && \
+# Build the lightweight application  
+RUN mkdir -p build_lightweight && cd build_lightweight && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make -j1
+    make -j$(nproc)
 
 # ============================================
-# Runtime stage - Use base image with all dependencies
+# Runtime stage - Minimal runtime dependencies
 # ============================================
 
-FROM ghcr.io/emekarr/gateman-face-base-image:latest AS runtime
+FROM ubuntu:22.04 AS runtime
 
-# Install missing runtime dependencies (redis-server and FFmpeg libs are not in base image)
+# Install minimal runtime dependencies
 RUN apt-get update && apt-get install -y \
-    redis-server \
-    libavcodec58 \
-    libavformat58 \
-    libavutil56 \
-    libswscale5 \
-    opencv-data \
+    # OpenCV runtime libraries
+    libopencv-core4.5d \
+    libopencv-imgproc4.5d \
+    libopencv-imgcodecs4.5d \
+    libopencv-video4.5d \
+    libopencv-videoio4.5d \
+    # CURL for video downloads
+    libcurl4 \
+    # Threading
+    libtbb12 \
+    # Utilities
+    curl \
+    # Clean up
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user for security
@@ -75,14 +75,11 @@ RUN useradd -r -s /bin/false appuser
 # Set working directory
 WORKDIR /app
 
-# Copy the built binary from builder stage
-COPY --from=builder /app/build/MLFaceService ./
+# Copy the built binaries from builder stage
+COPY --from=builder /app/build_lightweight/test_lightweight ./
 
-# Copy models from builder stage
-COPY --from=builder /app/models ./models/
-
-# Make the binary executable
-RUN chmod +x ./MLFaceService
+# Make binaries executable
+RUN chmod +x ./test_lightweight
 
 # Create logs directory
 RUN mkdir -p /app/logs && \
@@ -91,12 +88,12 @@ RUN mkdir -p /app/logs && \
 # Switch to non-root user
 USER appuser
 
-# Expose port
+# Expose port (for future web service integration)
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+# Health check using the test
+HEALTHCHECK --interval=60s --timeout=30s --start-period=10s --retries=3 \
+    CMD timeout 25s ./test_lightweight > /dev/null 2>&1 || exit 1
 
-# Default command
-CMD ["./MLFaceService", "--port", "8080", "--models", "./models"]
+# Default command - run the test to demonstrate functionality
+CMD ["./test_lightweight"]
