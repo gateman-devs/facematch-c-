@@ -1,0 +1,122 @@
+cmake_minimum_required(VERSION 3.16)
+project(LightweightFaceDetector VERSION 1.0.0)
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Optimization flags for minimal resource usage
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG -march=native -mtune=native")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG")
+
+# Default to Release build
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# Find required packages
+find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
+
+# OpenCV - only core modules needed
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs videoio)
+if(OpenCV_FOUND)
+    message(STATUS "OpenCV found: ${OpenCV_VERSION}")
+else()
+    message(FATAL_ERROR "OpenCV not found")
+endif()
+
+# TensorFlow Lite
+find_path(TENSORFLOW_LITE_INCLUDE_DIR tensorflow/lite/interpreter.h
+    PATHS
+        /usr/local/include
+        /usr/include
+        /opt/tensorflow/include
+        ${CMAKE_SOURCE_DIR}/third_party/tensorflow_lite/include
+)
+
+find_library(TENSORFLOW_LITE_LIB tensorflow-lite
+    PATHS
+        /usr/local/lib
+        /usr/lib
+        /opt/tensorflow/lib
+        ${CMAKE_SOURCE_DIR}/third_party/tensorflow_lite/lib
+)
+
+if(NOT TENSORFLOW_LITE_INCLUDE_DIR OR NOT TENSORFLOW_LITE_LIB)
+    message(WARNING "TensorFlow Lite not found. Will compile without TFLite support.")
+    set(USE_TFLITE FALSE)
+else()
+    message(STATUS "TensorFlow Lite found")
+    set(USE_TFLITE TRUE)
+endif()
+
+# libcurl for downloading videos
+find_package(CURL REQUIRED)
+if(CURL_FOUND)
+    message(STATUS "libcurl found: ${CURL_VERSION_STRING}")
+else()
+    message(FATAL_ERROR "libcurl not found")
+endif()
+
+# Include directories
+include_directories(${OpenCV_INCLUDE_DIRS})
+include_directories(${CURL_INCLUDE_DIRS})
+include_directories(${CMAKE_SOURCE_DIR}/src)
+
+if(USE_TFLITE)
+    include_directories(${TENSORFLOW_LITE_INCLUDE_DIR})
+    add_definitions(-DUSE_TFLITE)
+endif()
+
+# Source files for lightweight detector
+set(LIGHTWEIGHT_SOURCES
+    src/lightweight/lightweight_video_detector.cpp
+)
+
+# Create test executable
+add_executable(test_lightweight
+    test_lightweight_detector.cpp
+    ${LIGHTWEIGHT_SOURCES}
+)
+
+# Link libraries
+target_link_libraries(test_lightweight
+    ${OpenCV_LIBS}
+    ${CURL_LIBRARIES}
+    Threads::Threads
+)
+
+if(USE_TFLITE)
+    target_link_libraries(test_lightweight ${TENSORFLOW_LITE_LIB})
+endif()
+
+# Compiler-specific options
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(test_lightweight PRIVATE -Wall -Wextra -Wpedantic)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(test_lightweight PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+# Create models directory
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/models)
+
+# Custom target to download lightweight models
+add_custom_target(download_lightweight_models
+    COMMAND ${CMAKE_COMMAND} -E echo "Downloading lightweight models..."
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/models
+    COMMAND wget -nc -O ${CMAKE_CURRENT_BINARY_DIR}/models/blazeface.tflite https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite || true
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Downloading BlazeFace model"
+)
+
+# Print configuration summary
+message(STATUS "")
+message(STATUS "=== Lightweight Detector Configuration ===")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "TensorFlow Lite: ${USE_TFLITE}")
+message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "==========================================")
+message(STATUS "")

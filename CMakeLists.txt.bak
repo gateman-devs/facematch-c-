@@ -1,0 +1,227 @@
+cmake_minimum_required(VERSION 3.16)
+project(MLFaceService VERSION 1.0.0)
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Optimization flags - Use conservative optimization to minimize memory usage
+# Keep exceptions and RTTI enabled as they are used extensively in the code
+set(CMAKE_CXX_FLAGS_RELEASE "-O1 -DNDEBUG -pipe -fomit-frame-pointer")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG -pipe")
+
+# Default to Release build
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# Find required packages
+find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
+
+# OpenCV
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs highgui objdetect calib3d)
+if(OpenCV_FOUND)
+    message(STATUS "OpenCV found: ${OpenCV_VERSION}")
+else()
+    message(FATAL_ERROR "OpenCV not found")
+endif()
+
+# dlib
+find_package(dlib REQUIRED)
+if(dlib_FOUND)
+    message(STATUS "dlib found")
+else()
+    message(FATAL_ERROR "dlib not found")
+endif()
+
+# libcurl
+find_package(CURL REQUIRED)
+if(CURL_FOUND)
+    message(STATUS "libcurl found: ${CURL_VERSION_STRING}")
+else()
+    message(FATAL_ERROR "libcurl not found")
+endif()
+
+# Redis client (hiredis)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(HIREDIS hiredis)
+if(HIREDIS_FOUND)
+    # Use the full library path from pkg-config
+    set(HIREDIS_LINK_LIBRARIES ${HIREDIS_LDFLAGS})
+else()
+    message(STATUS "hiredis not found via pkg-config, checking for manual installation")
+    find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h PATHS /usr/local/include /usr/include)
+    find_library(HIREDIS_LIBRARY hiredis PATHS /usr/local/lib /usr/lib)
+    if(NOT HIREDIS_INCLUDE_DIR OR NOT HIREDIS_LIBRARY)
+        message(FATAL_ERROR "hiredis not found. Please install hiredis library.")
+    endif()
+    set(HIREDIS_LINK_LIBRARIES ${HIREDIS_LIBRARY})
+    set(HIREDIS_INCLUDE_DIRS ${HIREDIS_INCLUDE_DIR})
+endif()
+
+# Crow (HTTP framework)
+find_package(Crow QUIET)
+if(NOT Crow_FOUND)
+    message(STATUS "Crow not found via find_package, checking for manual installation")
+    find_path(CROW_INCLUDE_DIR crow.h PATHS /usr/local/include /usr/include)
+    if(NOT CROW_INCLUDE_DIR)
+        message(FATAL_ERROR "Crow not found. Please install Crow framework.")
+    endif()
+    set(CROW_LIBRARIES "")
+endif()
+
+# nlohmann/json
+find_package(nlohmann_json QUIET)
+if(NOT nlohmann_json_FOUND)
+    message(STATUS "nlohmann/json not found via find_package, checking for manual installation")
+    # Ubuntu package installs to /usr/include/nlohmann/json.hpp
+    find_path(NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp
+        PATHS
+            /usr/include
+            /usr/local/include
+            /opt/local/include
+    )
+    if(NOT NLOHMANN_JSON_INCLUDE_DIR)
+        message(STATUS "Searching for nlohmann/json.hpp in common locations...")
+        execute_process(COMMAND find /usr -name "json.hpp" 2>/dev/null OUTPUT_VARIABLE FIND_OUTPUT)
+        if(FIND_OUTPUT)
+            message(STATUS "Found json.hpp files: ${FIND_OUTPUT}")
+        endif()
+        message(FATAL_ERROR "nlohmann/json not found. Please install nlohmann/json library (nlohmann-json3-dev package).")
+    else()
+        message(STATUS "nlohmann/json found at: ${NLOHMANN_JSON_INCLUDE_DIR}")
+    endif()
+endif()
+
+# MediaPipe - Check for actual header availability
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MEDIAPIPE mediapipe)
+
+# Check if MediaPipe headers are actually available
+set(MEDIAPIPE_HEADERS_AVAILABLE FALSE)
+if(MEDIAPIPE_FOUND)
+    find_path(MEDIAPIPE_ACTUAL_INCLUDE_DIR mediapipe/framework/calculator_framework.h
+        PATHS ${MEDIAPIPE_INCLUDE_DIRS}
+        NO_DEFAULT_PATH
+    )
+    if(MEDIAPIPE_ACTUAL_INCLUDE_DIR)
+        set(MEDIAPIPE_HEADERS_AVAILABLE TRUE)
+        message(STATUS "MediaPipe headers found: ${MEDIAPIPE_ACTUAL_INCLUDE_DIR}")
+    else()
+        message(WARNING "MediaPipe pkg-config found but headers not available")
+        set(MEDIAPIPE_FOUND FALSE)
+    endif()
+endif()
+
+if(NOT MEDIAPIPE_FOUND OR NOT MEDIAPIPE_HEADERS_AVAILABLE)
+    message(WARNING "MediaPipe not fully available. Video liveness with FaceMesh will be disabled.")
+    set(MEDIAPIPE_FOUND FALSE)
+else()
+    message(STATUS "MediaPipe fully available with headers")
+endif()
+
+# Include directories
+include_directories(${OpenCV_INCLUDE_DIRS})
+include_directories(${CURL_INCLUDE_DIRS})
+include_directories(${HIREDIS_INCLUDE_DIRS})
+
+if(CROW_INCLUDE_DIR)
+    include_directories(${CROW_INCLUDE_DIR})
+endif()
+
+if(NLOHMANN_JSON_INCLUDE_DIR)
+    include_directories(${NLOHMANN_JSON_INCLUDE_DIR})
+    message(STATUS "Added nlohmann/json include directory: ${NLOHMANN_JSON_INCLUDE_DIR}")
+endif()
+
+if(MEDIAPIPE_INCLUDE_DIRS)
+    include_directories(${MEDIAPIPE_INCLUDE_DIRS})
+endif()
+
+# Source files
+set(SOURCES
+    src/main.cpp
+    src/image_processor.cpp
+    src/face_recognizer.cpp
+    src/liveness_detector.cpp
+    src/video_liveness_detector.cpp
+    src/web_server.cpp
+    src/challenge_generator.cpp
+    src/redis_cache.cpp
+    src/challenge_verifier.cpp
+)
+
+# Create executable
+add_executable(${PROJECT_NAME} ${SOURCES})
+
+# Link libraries
+target_link_libraries(${PROJECT_NAME} 
+    ${OpenCV_LIBS}
+    dlib::dlib
+    ${CURL_LIBRARIES}
+    ${HIREDIS_LINK_LIBRARIES}
+    Threads::Threads
+)
+
+# Link MediaPipe if found
+if(MEDIAPIPE_FOUND AND MEDIAPIPE_LIBRARIES)
+    target_link_libraries(${PROJECT_NAME} ${MEDIAPIPE_LIBRARIES})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE MEDIAPIPE_AVAILABLE)
+else()
+    message(WARNING "MediaPipe not available - video liveness with FaceMesh will be disabled")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE MEDIAPIPE_NOT_AVAILABLE)
+endif()
+
+# Link Crow if found via find_package
+if(Crow_FOUND)
+    target_link_libraries(${PROJECT_NAME} Crow::Crow)
+else()
+    # Manual linking for Crow dependencies
+    target_link_libraries(${PROJECT_NAME} pthread)
+endif()
+
+# nlohmann/json linking
+if(nlohmann_json_FOUND)
+    target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json)
+endif()
+
+# Compiler-specific options
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4)
+endif()
+
+# Install rules
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+
+# Print configuration summary
+message(STATUS "")
+message(STATUS "=== Configuration Summary ===")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "============================")
+message(STATUS "")
+
+# Create models directory if it doesn't exist
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/models)
+
+# Custom target to download models
+add_custom_target(download_models
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/download_models.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Downloading ML models"
+)
+
+# Custom target for running the application
+add_custom_target(run
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME} --models ${CMAKE_CURRENT_BINARY_DIR}/models
+    DEPENDS ${PROJECT_NAME}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Running ML Face Service"
+)
