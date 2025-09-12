@@ -22,14 +22,16 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to download file with checksum verification
+# Function to download file with checksum verification and retry logic
 download_with_checksum() {
     local url="$1"
     local filename="$2"
     local expected_sha256="$3"
-    
+    local max_retries=3
+    local retry_count=0
+
     echo "Downloading $filename..."
-    
+
     # Skip if file already exists and has correct checksum
     if [[ -f "$filename" ]]; then
         if command_exists sha256sum; then
@@ -40,7 +42,7 @@ download_with_checksum() {
             echo "Warning: No checksum utility available, skipping verification"
             return 0
         fi
-        
+
         if [[ "$current_checksum" == "$expected_sha256" ]]; then
             echo "✓ $filename already exists with correct checksum"
             return 0
@@ -49,14 +51,39 @@ download_with_checksum() {
             rm -f "$filename"
         fi
     fi
-    
-    # Download the file
-    if command_exists curl; then
-        curl -L -o "$filename" "$url"
-    elif command_exists wget; then
-        wget -O "$filename" "$url"
-    else
-        echo "✗ Error: Neither curl nor wget is available for downloading"
+
+    # Download the file with retry logic
+    while [[ $retry_count -lt $max_retries ]]; do
+        echo "Download attempt $((retry_count + 1))/$max_retries..."
+
+        if command_exists curl; then
+            if curl -L --connect-timeout 30 --max-time 300 --retry 3 --retry-delay 5 -o "$filename" "$url"; then
+                echo "✓ Download successful"
+                break
+            else
+                echo "✗ Download failed (attempt $((retry_count + 1)))"
+            fi
+        elif command_exists wget; then
+            if wget --timeout=30 --tries=3 -O "$filename" "$url"; then
+                echo "✓ Download successful"
+                break
+            else
+                echo "✗ Download failed (attempt $((retry_count + 1)))"
+            fi
+        else
+            echo "✗ Error: Neither curl nor wget is available for downloading"
+            return 1
+        fi
+
+        retry_count=$((retry_count + 1))
+        if [[ $retry_count -lt $max_retries ]]; then
+            echo "Waiting 10 seconds before retry..."
+            sleep 10
+        fi
+    done
+
+    if [[ $retry_count -eq $max_retries ]]; then
+        echo "✗ Error: Failed to download $filename after $max_retries attempts"
         return 1
     fi
     

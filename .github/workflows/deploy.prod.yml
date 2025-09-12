@@ -29,15 +29,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Download models
-        run: |
-          echo "📥 Downloading ML models..."
-          chmod +x download_models.sh
-          ./download_models.sh
 
       - name: Test Docker build locally
         run: |

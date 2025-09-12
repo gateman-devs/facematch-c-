@@ -64,11 +64,17 @@ RUN apt-get update && apt-get install -y \
     libdlib-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Download and extract Crow web framework
+RUN git clone --depth 1 --branch master https://github.com/CrowCpp/Crow.git crow
+
+# Download ML models using the script
+COPY download_models.sh ./
+RUN chmod +x download_models.sh && \
+    ./download_models.sh
+
 # Copy source code
 COPY CMakeLists.txt ./
-COPY crow/ ./crow/
 COPY src/ ./src/
-COPY models/ ./models/
 
 # Build the full service (limit parallel jobs to avoid OOM)
 RUN mkdir -p build && cd build && \
