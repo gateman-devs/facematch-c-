@@ -202,15 +202,21 @@ docker-compose down -v
 
 #### Manual Docker Commands
 ```bash
-# Build the image
+# Build the lightweight image (default)
 docker build -t gateman-face .
 
-# Run with Redis
-docker run -d --name redis redis:7-alpine
-docker run -d -p 8080:8080 --link redis:redis -e REDIS_HOST=redis gateman-face
+# Build the full production image (with ML models)
+docker build -f Dockerfile.prod -t gateman-face-prod .
 
-# Run standalone (without Redis - challenge system disabled)
+# Run lightweight version
 docker run -d -p 8080:8080 gateman-face
+
+# Run production version with Redis
+docker run -d --name redis redis:7-alpine
+docker run -d -p 8080:8080 --link redis:redis -e REDIS_HOST=redis gateman-face-prod
+
+# Test the deployment
+./test_docker.sh
 ```
 
 #### Docker Environment Variables
@@ -218,8 +224,39 @@ docker run -d -p 8080:8080 gateman-face
 - `REDIS_PORT`: Redis port (default: 6379)
 - `REDIS_PASSWORD`: Redis password (optional)
 
+## CI/CD
+
+### GitHub Actions
+
+The project includes comprehensive CI/CD pipelines:
+
+- **CI Pipeline** (`.github/workflows/ci.yml`): Runs on every push/PR to main/develop branches
+  - Builds and tests the lightweight Docker image
+  - Validates API endpoints functionality
+  - Ensures build integrity
+
+- **Production Deployment** (`.github/workflows/deploy.prod.yml`): Deploys to production on main branch pushes
+  - Builds the full production image with ML models
+  - Downloads required model files
+  - Pushes to Harbor registry with proper tagging
+  - Includes security attestation and SBOM
+
+### Required Secrets for Production Deployment
+
+Set these in your GitHub repository secrets:
+- `HARBOR_REGISTRY`: Your Harbor registry URL
+- `HARBOR_USERNAME`: Registry username
+- `HARBOR_PASSWORD`: Registry password
+
 ## Testing
 
+### Docker Testing
+Test the Docker deployment locally:
+```bash
+./test_docker.sh
+```
+
+### API Testing
 Test the service endpoints:
 ```bash
 ./test_service.sh
