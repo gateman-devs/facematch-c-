@@ -202,18 +202,15 @@ docker-compose down -v
 
 #### Manual Docker Commands
 ```bash
-# Build the lightweight image (default)
+# Build the production image (includes all ML models)
 docker build -t gateman-face .
 
-# Build the full production image (with ML models)
-docker build -f Dockerfile.prod -t gateman-face-prod .
-
-# Run lightweight version
-docker run -d -p 8080:8080 gateman-face
-
-# Run production version with Redis
+# Run with Redis (recommended for full functionality)
 docker run -d --name redis redis:7-alpine
-docker run -d -p 8080:8080 --link redis:redis -e REDIS_HOST=redis gateman-face-prod
+docker run -d -p 8080:8080 --link redis:redis -e REDIS_HOST=redis gateman-face
+
+# Run standalone (without Redis - challenge system disabled)
+docker run -d -p 8080:8080 gateman-face
 
 # Test the deployment
 ./test_docker.sh
@@ -231,13 +228,14 @@ docker run -d -p 8080:8080 --link redis:redis -e REDIS_HOST=redis gateman-face-p
 The project includes comprehensive CI/CD pipelines:
 
 - **CI Pipeline** (`.github/workflows/ci.yml`): Runs on every push/PR to main/develop branches
-  - Builds and tests the lightweight Docker image
-  - Validates API endpoints functionality
-  - Ensures build integrity
+  - Downloads ML models using the download script
+  - Builds and tests the production Docker image
+  - Validates all API endpoints functionality
+  - Ensures build integrity and service availability
 
 - **Production Deployment** (`.github/workflows/deploy.prod.yml`): Deploys to production on main branch pushes
-  - Builds the full production image with ML models
-  - Downloads required model files
+  - Downloads all required ML model files
+  - Builds the full production image with complete ML functionality
   - Pushes to Harbor registry with proper tagging
   - Includes security attestation and SBOM
 

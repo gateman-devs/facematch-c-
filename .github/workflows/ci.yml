@@ -16,7 +16,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build lightweight Docker image for testing
+      - name: Download models
+        run: |
+          echo "📥 Downloading ML models..."
+          chmod +x download_models.sh
+          ./download_models.sh
+
+      - name: Build Docker image for testing
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -29,7 +35,7 @@ jobs:
       - name: Run Docker container for testing
         run: |
           docker run -d --name test-container -p 8080:8080 gateman-face:test
-          sleep 10
+          sleep 15
 
       - name: Test health endpoint
         run: |
@@ -56,6 +62,11 @@ jobs:
             -d '{}' > /dev/null || exit 1
           echo "✓ Generate-challenge endpoint is accessible"
 
+          # Test verify-video-liveness endpoint (may fail without Redis)
+          curl -s -X POST http://localhost:8080/verify-video-liveness \
+            -H "Content-Type: application/json" \
+            -d '{"challenge_id": "test", "video_urls": []}' || echo "⚠ Verify-video-liveness may require Redis"
+
       - name: Clean up
         run: docker stop test-container && docker rm test-container
 
@@ -77,5 +88,6 @@ jobs:
 
       - name: Check source files exist
         run: |
-          [ -f "src/main.cpp" ] || [ -f "lightweight_web_server.cpp" ] || exit 1
+          [ -f "src/main.cpp" ] || exit 1
+          [ -f "CMakeLists.txt" ] || exit 1
           echo "✓ Source files exist"

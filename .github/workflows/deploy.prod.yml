@@ -37,23 +37,11 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
-      - name: Download models (if needed)
+      - name: Download models
         run: |
-          echo "📥 Ensuring models are available..."
-          if [ ! -f "models/dlib_face_recognition_resnet_model_v1.dat" ]; then
-            echo "Downloading face recognition model..."
-            wget -O models/dlib_face_recognition_resnet_model_v1.dat \
-              "http://dlib.net/files/dlib_face_recognition_resnet_model_v1.dat.bz2" \
-              && bunzip2 models/dlib_face_recognition_resnet_model_v1.dat.bz2 \
-              || echo "Warning: Could not download face recognition model"
-          fi
-          if [ ! -f "models/shape_predictor_68_face_landmarks.dat" ]; then
-            echo "Downloading face landmarks model..."
-            wget -O models/shape_predictor_68_face_landmarks.dat \
-              "http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2" \
-              && bunzip2 models/shape_predictor_68_face_landmarks.dat.bz2 \
-              || echo "Warning: Could not download face landmarks model"
-          fi
+          echo "📥 Downloading ML models..."
+          chmod +x download_models.sh
+          ./download_models.sh
 
       - name: Extract metadata
         id: meta
@@ -69,7 +57,7 @@ jobs:
       - name: Test Docker build locally
         run: |
           echo "🧪 Testing production Docker build..."
-          docker build -f Dockerfile.prod -t test-build . --progress=plain
+          docker build -t test-build . --progress=plain
           echo "✅ Production Docker build test successful"
 
       - name: Build and push Docker image
@@ -77,7 +65,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.prod
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
