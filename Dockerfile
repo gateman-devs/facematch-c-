@@ -120,6 +120,8 @@ RUN apt-get update && apt-get install -y \
     libjpeg8 \
     # X11 runtime (minimal)
     libx11-6 \
+    # dlib runtime
+    libdlib19 \
     # Utilities
     curl \
     # Clean up
