@@ -225,19 +225,18 @@ docker run -d -p 8080:8080 gateman-face
 
 ### GitHub Actions
 
-The project includes comprehensive CI/CD pipelines:
+The project includes a unified CI/CD pipeline (`.github/workflows/deploy.prod.yml`):
 
-- **CI Pipeline** (`.github/workflows/ci.yml`): Runs on every push/PR to main/develop branches
-  - Downloads ML models using the download script
-  - Builds and tests the production Docker image
-  - Validates all API endpoints functionality
-  - Ensures build integrity and service availability
+- **Pull Requests**: Runs build tests and API validation without pushing to registry
+- **Main Branch Pushes**: Full deployment with model downloads, security scanning, and registry push
+- **Manual Triggers**: Supports workflow_dispatch for custom deployments
 
-- **Production Deployment** (`.github/workflows/deploy.prod.yml`): Deploys to production on main branch pushes
-  - Downloads all required ML model files
-  - Builds the full production image with complete ML functionality
-  - Pushes to Harbor registry with proper tagging
-  - Includes security attestation and SBOM
+**Pipeline Features:**
+- Downloads all required ML model files automatically
+- Builds the full production image with complete ML functionality
+- Runs comprehensive API endpoint testing on PRs
+- Pushes to Harbor registry with proper tagging on main branch
+- Includes security attestation and SBOM generation
 
 ### Required Secrets for Production Deployment
 

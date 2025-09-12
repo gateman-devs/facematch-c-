@@ -1,7 +1,10 @@
-name: Deploy to Production
+name: Build and Deploy
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -30,20 +33,59 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Harbor Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
-
       - name: Download models
         run: |
           echo "📥 Downloading ML models..."
           chmod +x download_models.sh
           ./download_models.sh
 
+      - name: Test Docker build locally
+        run: |
+          echo "🧪 Testing Docker build..."
+          docker build -t test-build . --progress=plain
+          echo "✅ Docker build test successful"
+
+      - name: Test Docker container functionality
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "🧪 Running API tests..."
+          docker run -d --name test-container -p 8080:8080 test-build
+          sleep 20
+
+          # Test health endpoint
+          curl -f -s http://localhost:8080/health > /dev/null || exit 1
+          echo "✓ Health endpoint is accessible"
+
+          # Test API endpoints
+          curl -s -X POST http://localhost:8080/compare-faces \
+            -H "Content-Type: application/json" \
+            -d '{"image1": "test", "image2": "test"}' > /dev/null || exit 1
+          echo "✓ Compare-faces endpoint is accessible"
+
+          curl -s -X POST http://localhost:8080/liveness-check \
+            -H "Content-Type: application/json" \
+            -d '{"image": "test"}' > /dev/null || exit 1
+          echo "✓ Liveness-check endpoint is accessible"
+
+          curl -s -X POST http://localhost:8080/generate-challenge \
+            -H "Content-Type: application/json" \
+            -d '{}' > /dev/null || exit 1
+          echo "✓ Generate-challenge endpoint is accessible"
+
+          # Clean up
+          docker stop test-container && docker rm test-container
+          echo "✅ All API tests passed"
+
+      - name: Log in to Harbor Registry
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
       - name: Extract metadata
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -54,13 +96,8 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event.inputs.tag != '' }}
 
-      - name: Test Docker build locally
-        run: |
-          echo "🧪 Testing production Docker build..."
-          docker build -t test-build . --progress=plain
-          echo "✅ Production Docker build test successful"
-
       - name: Build and push Docker image
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         id: push
         uses: docker/build-push-action@v5
         with:
@@ -76,6 +113,7 @@ jobs:
           sbom: true
 
       - name: Generate artifact attestation
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.PROJECT_NAME }}/${{ env.IMAGE_NAME }}
