@@ -102,9 +102,12 @@ class VideoLivenessDetector {
 public:
     VideoLivenessDetector();
     ~VideoLivenessDetector();
-    
+
     // Initialize the detector
     bool initialize();
+
+    // Initialize MediaPipe models using OpenCV DNN
+    bool initializeMediaPipeModels();
     
     // Process video from URL
     VideoLivenessAnalysis analyzeVideoFromUrl(const std::string& video_url);
@@ -128,7 +131,12 @@ public:
 
 private:
     bool initialized;
-    
+
+    // MediaPipe models using OpenCV DNN
+    cv::dnn::Net face_detection_net;  // BlazeFace model
+    cv::dnn::Net face_landmark_net;   // Face landmark model
+    bool mediapipe_models_loaded;
+
 #ifdef MEDIAPIPE_AVAILABLE
     std::unique_ptr<mediapipe::CalculatorGraph> graph;
     std::string graph_config;
@@ -192,6 +200,9 @@ private:
                                        VideoLivenessAnalysis& analysis);
     
 HeadPoseMovement calculateHeadPoseMediaPipe(const cv::Mat& frame, float timestamp);
+
+    // MediaPipe DNN-based head pose calculation
+    HeadPoseMovement calculateHeadPoseMediaPipeDNN(const cv::Mat& frame, float timestamp);
 #ifdef MEDIAPIPE_AVAILABLE
     bool setupMediaPipeGraph();
 #endif
