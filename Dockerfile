@@ -1,6 +1,6 @@
 # ============================================
 # Lightweight Face Service - Dockerfile
-# OpenCV-only implementation (no heavy ML models)
+# OpenCV-only web server implementation
 # ============================================
 
 # Build stage - Lightweight dependencies only
@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Set working directory
 WORKDIR /app
 
-# Install only essential build dependencies (no heavy ML libraries)
+# Install build dependencies (including web server dependencies)
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -33,18 +33,26 @@ RUN apt-get update && apt-get install -y \
     libopencv-videoio-dev \
     # Threading support
     libtbb-dev \
+    # Boost for Crow web framework
+    libboost-system-dev \
+    libboost-thread-dev \
+    # ASIO networking library for Crow
+    libasio-dev \
+    # nlohmann/json dependency
+    nlohmann-json3-dev \
     # Clean up apt cache
     && rm -rf /var/lib/apt/lists/*
 
 # Copy source code and build configuration
 COPY CMakeLists.txt ./
+COPY crow/ ./crow/
 COPY src/lightweight/ ./src/lightweight/
 COPY *.cpp ./
 
-# Build the lightweight application  
+# Build the lightweight web server
 RUN mkdir -p build_lightweight && cd build_lightweight && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make -j$(nproc)
+    make lightweight_web_server -j$(nproc)
 
 # ============================================
 # Runtime stage - Minimal runtime dependencies
@@ -64,6 +72,9 @@ RUN apt-get update && apt-get install -y \
     libcurl4 \
     # Threading
     libtbb12 \
+    # Boost runtime for Crow
+    libboost-system1.74.0 \
+    libboost-thread1.74.0 \
     # Utilities
     curl \
     # Clean up
@@ -75,11 +86,11 @@ RUN useradd -r -s /bin/false appuser
 # Set working directory
 WORKDIR /app
 
-# Copy the built binaries from builder stage
-COPY --from=builder /app/build_lightweight/test_lightweight ./
+# Copy the built web server binary from builder stage
+COPY --from=builder /app/build_lightweight/lightweight_web_server ./
 
-# Make binaries executable
-RUN chmod +x ./test_lightweight
+# Make binary executable
+RUN chmod +x ./lightweight_web_server
 
 # Create logs directory
 RUN mkdir -p /app/logs && \
@@ -88,12 +99,12 @@ RUN mkdir -p /app/logs && \
 # Switch to non-root user
 USER appuser
 
-# Expose port (for future web service integration)
+# Expose port for web server
 EXPOSE 8080
 
-# Health check using the test
+# Health check using curl to test the /health endpoint
 HEALTHCHECK --interval=60s --timeout=30s --start-period=10s --retries=3 \
-    CMD timeout 25s ./test_lightweight > /dev/null 2>&1 || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# Default command - run the test to demonstrate functionality
-CMD ["./test_lightweight"]
+# Default command - run the web server
+CMD ["./lightweight_web_server", "--port", "8080"]

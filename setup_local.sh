@@ -120,16 +120,16 @@ build_project() {
         make -j"$cpu_count" >/dev/null
     fi
     
-    # Check if test binaries were created
-    local test_found=false
-    for binary in "test_lightweight" "optimized_test" "diagnostic_test"; do
+    # Check if binaries were created
+    local build_success=false
+    for binary in "test_lightweight" "lightweight_server" "lightweight_web_server"; do
         if [[ -f "$BUILD_DIR/$binary" ]]; then
             log "✓ Built: $binary"
-            test_found=true
+            build_success=true
         fi
     done
     
-    if [[ "$test_found" == "true" ]]; then
+    if [[ "$build_success" == "true" ]]; then
         log "✓ Build completed successfully"
         cd "$SCRIPT_DIR"
         return 0

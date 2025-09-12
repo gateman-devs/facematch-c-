@@ -246,7 +246,9 @@ std::vector<cv::Mat> LightweightVideoDetector::extractFrames(const std::string& 
     
     // Download if URL
     if (video_path_or_url.find("http") == 0) {
-        cv::Mat dummy = downloadVideo(video_path_or_url, temp_path);
+        // Decode URL before downloading
+        std::string decoded_url = decodeUrl(video_path_or_url);
+        cv::Mat dummy = downloadVideo(decoded_url, temp_path);
         if (!temp_path.empty()) {
             video_path = temp_path;
         } else {
@@ -652,6 +654,28 @@ std::vector<VideoAnalysis> ConcurrentVideoProcessor::processVideos(
     }
     
     return results;
+}
+
+std::string LightweightVideoDetector::decodeUrl(const std::string& encoded_url) {
+    std::string decoded = encoded_url;
+    std::string hex_chars = "0123456789ABCDEFabcdef";
+    
+    size_t pos = 0;
+    while ((pos = decoded.find('%', pos)) != std::string::npos) {
+        if (pos + 2 < decoded.length()) {
+            std::string hex_str = decoded.substr(pos + 1, 2);
+            // Check if it's valid hex
+            if (hex_chars.find(hex_str[0]) != std::string::npos && 
+                hex_chars.find(hex_str[1]) != std::string::npos) {
+                
+                char decoded_char = static_cast<char>(std::stoi(hex_str, nullptr, 16));
+                decoded.replace(pos, 3, 1, decoded_char);
+            }
+        }
+        pos++;
+    }
+    
+    return decoded;
 }
 
 } // namespace lightweight

@@ -106,6 +106,9 @@ private:
     std::vector<cv::Mat> extractFrames(const std::string& video_path_or_url);
     cv::Mat downloadVideo(const std::string& url, std::string& temp_path);
     
+    // URL decoding utility
+    std::string decodeUrl(const std::string& encoded_url);
+    
     // Face detection methods
     std::optional<FaceDetection> detectFace(const cv::Mat& frame);
     std::optional<FaceDetection> detectFaceWithColorSegmentation(const cv::Mat& frame);

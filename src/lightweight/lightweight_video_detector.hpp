@@ -136,6 +136,9 @@ private:
     std::vector<cv::Mat> extractFrames(const std::string& video_path_or_url);
     cv::Mat downloadVideo(const std::string& url, std::string& temp_path);
     
+    // URL decoding utility
+    std::string decodeUrl(const std::string& encoded_url);
+    
     // Face detection with BlazeFace
     std::optional<FaceDetection> detectFace(const cv::Mat& frame);
     cv::Mat preprocessForBlazeFace(const cv::Mat& frame);

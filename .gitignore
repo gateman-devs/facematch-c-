@@ -47,3 +47,6 @@ Makefile
 
 # Package managers
 node_modules/
+
+# Dependencies (downloaded/built separately)
+crow/

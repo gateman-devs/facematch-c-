@@ -15,7 +15,9 @@ cv::Mat ImageProcessor::loadImage(const std::string& input) {
     if (isBase64(input)) {
         return decodeBase64(input);
     } else {
-        return downloadImage(input);
+        // Decode URL if it's encoded
+        std::string decoded_url = decodeUrl(input);
+        return downloadImage(decoded_url);
     }
 }
 
@@ -184,6 +186,28 @@ cv::Mat ImageProcessor::downloadImage(const std::string& url) {
         std::cerr << "Error downloading image: " << e.what() << std::endl;
         return cv::Mat();
     }
+}
+
+std::string ImageProcessor::decodeUrl(const std::string& encoded_url) {
+    std::string decoded = encoded_url;
+    std::string hex_chars = "0123456789ABCDEFabcdef";
+    
+    size_t pos = 0;
+    while ((pos = decoded.find('%', pos)) != std::string::npos) {
+        if (pos + 2 < decoded.length()) {
+            std::string hex_str = decoded.substr(pos + 1, 2);
+            // Check if it's valid hex
+            if (hex_chars.find(hex_str[0]) != std::string::npos && 
+                hex_chars.find(hex_str[1]) != std::string::npos) {
+                
+                char decoded_char = static_cast<char>(std::stoi(hex_str, nullptr, 16));
+                decoded.replace(pos, 3, 1, decoded_char);
+            }
+        }
+        pos++;
+    }
+    
+    return decoded;
 }
 
 bool ImageProcessor::isValidImageFormat(const std::string& format) {

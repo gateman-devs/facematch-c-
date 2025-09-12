@@ -34,6 +34,9 @@ private:
     // Decode Base64 string to cv::Mat
     cv::Mat decodeBase64(const std::string& base64_string);
     
+    // URL decoding utility
+    std::string decodeUrl(const std::string& encoded_url);
+    
     // Download image from URL
     cv::Mat downloadImage(const std::string& url);
     
