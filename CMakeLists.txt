@@ -19,7 +19,7 @@ find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
 # Find OpenCV
-find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs videoio video)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs videoio video objdetect highgui ml)
 if(OpenCV_FOUND)
     message(STATUS "OpenCV found: ${OpenCV_VERSION}")
 else()
@@ -32,6 +32,9 @@ find_package(CURL REQUIRED)
 # Find hiredis (Redis client) - optional for lightweight builds
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(HIREDIS hiredis)
+
+# Find dlib
+find_package(dlib REQUIRED)
 
 # Find nlohmann/json
 find_package(nlohmann_json QUIET)
@@ -82,6 +85,7 @@ if(CROW_FOUND AND nlohmann_json_FOUND AND HIREDIS_FOUND)
         ${CURL_LIBRARIES}
         Crow::Crow
         Threads::Threads
+        dlib::dlib
     )
 
     # Link hiredis libraries
@@ -105,57 +109,74 @@ else()
     endif()
 endif()
 
-# Always build lightweight test and server
-add_executable(test_lightweight
-    test_lightweight_simple.cpp
-    ${LIGHTWEIGHT_SOURCES}
-)
+# Build lightweight executables only if source files exist (for development)
+if(EXISTS "${CMAKE_SOURCE_DIR}/test_lightweight_simple.cpp")
+    add_executable(test_lightweight
+        test_lightweight_simple.cpp
+        ${LIGHTWEIGHT_SOURCES}
+    )
 
-add_executable(lightweight_server
-    lightweight_server.cpp
-    ${LIGHTWEIGHT_SOURCES}
-)
+    target_link_libraries(test_lightweight
+        ${OpenCV_LIBS}
+        ${CURL_LIBRARIES}
+        Threads::Threads
+    )
 
-# Build lightweight web server with HTTP endpoints if Crow is available
-if(CROW_FOUND)
+    message(STATUS "✓ test_lightweight will be built")
+endif()
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/lightweight_server.cpp")
+    add_executable(lightweight_server
+        lightweight_server.cpp
+        ${LIGHTWEIGHT_SOURCES}
+    )
+
+    target_link_libraries(lightweight_server
+        ${OpenCV_LIBS}
+        ${CURL_LIBRARIES}
+        Threads::Threads
+    )
+
+    message(STATUS "✓ lightweight_server will be built")
+endif()
+
+# Build lightweight web server with HTTP endpoints if Crow is available and source exists
+if(CROW_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/lightweight_web_server.cpp")
     add_executable(lightweight_web_server
         lightweight_web_server.cpp
         ${LIGHTWEIGHT_SOURCES}
     )
-    
+
     target_link_libraries(lightweight_web_server
         ${OpenCV_LIBS}
         ${CURL_LIBRARIES}
         Crow::Crow
         Threads::Threads
     )
-    
+
     if(nlohmann_json_FOUND)
         target_link_libraries(lightweight_web_server nlohmann_json::nlohmann_json)
     endif()
-    
+
     message(STATUS "✓ Lightweight web server (lightweight_web_server) will be built")
+elseif(NOT EXISTS "${CMAKE_SOURCE_DIR}/lightweight_web_server.cpp")
+    message(STATUS "⚠ Lightweight web server skipped - source file not found")
 else()
     message(STATUS "✗ Lightweight web server skipped - Crow not found")
 endif()
 
-# Link libraries for lightweight executables
-target_link_libraries(test_lightweight
-    ${OpenCV_LIBS}
-    ${CURL_LIBRARIES}
-    Threads::Threads
-)
+# Set executable properties conditionally
+if(TARGET test_lightweight)
+    set_target_properties(test_lightweight PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+endif()
 
-target_link_libraries(lightweight_server
-    ${OpenCV_LIBS}
-    ${CURL_LIBRARIES}
-    Threads::Threads
-)
-
-# Set executable properties
-set_target_properties(test_lightweight lightweight_server PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-)
+if(TARGET lightweight_server)
+    set_target_properties(lightweight_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+endif()
 
 if(TARGET MLFaceService)
     set_target_properties(MLFaceService PROPERTIES
@@ -169,12 +190,20 @@ message(STATUS "=== Build Configuration ===")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "OpenCV version: ${OpenCV_VERSION}")
 message(STATUS "Executables to build:")
-message(STATUS "  - test_lightweight (lightweight video test)")  
-message(STATUS "  - lightweight_server (basic server, no HTTP endpoints)")
+if(TARGET test_lightweight)
+    message(STATUS "  - test_lightweight (lightweight video test)")
+else()
+    message(STATUS "  - test_lightweight (skipped - source not found)")
+endif()
+if(TARGET lightweight_server)
+    message(STATUS "  - lightweight_server (basic server, no HTTP endpoints)")
+else()
+    message(STATUS "  - lightweight_server (skipped - source not found)")
+endif()
 if(TARGET lightweight_web_server)
     message(STATUS "  - lightweight_web_server (HTTP web server with all endpoints)")
 else()
-    message(STATUS "  - lightweight_web_server (skipped - Crow not found)")
+    message(STATUS "  - lightweight_web_server (skipped - source not found or Crow not found)")
 endif()
 if(TARGET MLFaceService)
     message(STATUS "  - MLFaceService (full HTTP web server with heavy ML models)")

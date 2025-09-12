@@ -44,6 +44,8 @@ RUN apt-get update && apt-get install -y \
     nlohmann-json3-dev \
     # Redis client
     libhiredis-dev \
+    # SQLite (required by system dlib)
+    libsqlite3-dev \
     # BLAS and LAPACK for dlib
     libblas-dev \
     liblapack-dev \
@@ -57,14 +59,10 @@ RUN apt-get update && apt-get install -y \
     # Clean up
     && rm -rf /var/lib/apt/lists/*
 
-# Install dlib from source (required for face recognition)
-RUN git clone --depth 1 --branch v19.24 https://github.com/davisking/dlib.git && \
-    cd dlib && \
-    mkdir build && cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local && \
-    make -j$(nproc) && \
-    make install && \
-    cd ../.. && rm -rf dlib
+# Install dlib from apt (simpler and more reliable)
+RUN apt-get update && apt-get install -y \
+    libdlib-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy source code
 COPY CMakeLists.txt ./
@@ -72,10 +70,12 @@ COPY crow/ ./crow/
 COPY src/ ./src/
 COPY models/ ./models/
 
-# Build the full service
+# Build the full service (limit parallel jobs to avoid OOM)
 RUN mkdir -p build && cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make MLFaceService -j$(nproc)
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_FLAGS="-O2 -DNDEBUG -march=native" \
+        -DCMAKE_C_FLAGS="-O2 -DNDEBUG -march=native" && \
+    make MLFaceService -j2
 
 # ============================================
 # Runtime stage - Minimal runtime dependencies
@@ -104,6 +104,8 @@ RUN apt-get update && apt-get install -y \
     libcurl4 \
     # Redis client
     libhiredis0.14 \
+    # SQLite runtime
+    libsqlite3-0 \
     # BLAS and LAPACK
     libblas3 \
     liblapack3 \
