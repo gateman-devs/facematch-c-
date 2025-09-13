@@ -212,8 +212,14 @@ VideoLivenessAnalysis VideoLivenessDetector::analyzeVideo(cv::VideoCapture& cap)
         
         analysis.frame_count = frame_count;
         
+        // Debug: Log pose movements found
+        std::cout << "Found " << analysis.pose_movements.size() << " pose movements from " 
+                  << frame_count << " frames" << std::endl;
+        
         // Check if we have enough data
         if (static_cast<int>(analysis.pose_movements.size()) < MIN_FRAMES / skip_frames) {
+            std::cout << "Insufficient face detection: need at least " << (MIN_FRAMES / skip_frames) 
+                      << " pose movements, got " << analysis.pose_movements.size() << std::endl;
             setFailureReason(analysis, "insufficient_face_detection");
             return analysis;
         }
@@ -401,15 +407,23 @@ std::vector<cv::Point2f> VideoLivenessDetector::getFaceLandmarks(const cv::Mat& 
         // First try Haar cascades with different parameters
         cv::CascadeClassifier face_cascade;
         std::vector<std::string> cascade_paths = {
+            // Ubuntu/Debian paths
             "/usr/share/opencv4/haarcascades/haarcascade_frontalface_alt.xml",
+            "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
+            "/usr/share/opencv/haarcascades/haarcascade_frontalface_alt.xml", 
+            "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml",
+            // macOS/custom install paths
             "/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_alt.xml",
+            "/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
             "/opt/homebrew/share/opencv4/haarcascades/haarcascade_frontalface_alt.xml",
-            "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
+            "/opt/homebrew/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
         };
 
         std::vector<cv::Rect> faces;
+        bool cascade_loaded = false;
         for (const auto& path : cascade_paths) {
-            if (face_cascade.load(path)) {
+            if (std::filesystem::exists(path) && face_cascade.load(path)) {
+                cascade_loaded = true;
                 // Try with different parameters for better detection
                 std::vector<cv::Rect> detected_faces;
                 face_cascade.detectMultiScale(gray, detected_faces, 1.1, 2, 0, cv::Size(30, 30));
@@ -418,7 +432,13 @@ std::vector<cv::Point2f> VideoLivenessDetector::getFaceLandmarks(const cv::Mat& 
                 // Also try with different scale factor and min neighbors
                 face_cascade.detectMultiScale(gray, detected_faces, 1.2, 3, 0, cv::Size(40, 40));
                 faces.insert(faces.end(), detected_faces.begin(), detected_faces.end());
+                break; // Use first working cascade
             }
+        }
+        
+        if (!cascade_loaded) {
+            std::cerr << "Warning: No Haar cascade files found, face detection will fail" << std::endl;
+            return landmarks; // Return empty landmarks
         }
 
         // Remove duplicate detections (simple approach)
