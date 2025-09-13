@@ -407,11 +407,13 @@ std::vector<cv::Point2f> VideoLivenessDetector::getFaceLandmarks(const cv::Mat& 
         // First try Haar cascades with different parameters
         cv::CascadeClassifier face_cascade;
         std::vector<std::string> cascade_paths = {
-            // Ubuntu/Debian paths
+            // Ubuntu/Debian paths (libopencv-data package)
             "/usr/share/opencv4/haarcascades/haarcascade_frontalface_alt.xml",
             "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
             "/usr/share/opencv/haarcascades/haarcascade_frontalface_alt.xml", 
             "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml",
+            "/usr/local/share/OpenCV/haarcascades/haarcascade_frontalface_alt.xml",
+            "/usr/local/share/OpenCV/haarcascades/haarcascade_frontalface_default.xml",
             // macOS/custom install paths
             "/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_alt.xml",
             "/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
@@ -437,8 +439,29 @@ std::vector<cv::Point2f> VideoLivenessDetector::getFaceLandmarks(const cv::Mat& 
         }
         
         if (!cascade_loaded) {
-            std::cerr << "Warning: No Haar cascade files found, face detection will fail" << std::endl;
-            return landmarks; // Return empty landmarks
+            // Try to find Haar cascade files using find command as last resort
+            std::string find_result;
+            FILE* pipe = popen("find /usr -name 'haarcascade_frontalface_*.xml' 2>/dev/null | head -1", "r");
+            if (pipe) {
+                char buffer[256];
+                if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                    find_result = buffer;
+                    // Remove newline
+                    if (!find_result.empty() && find_result.back() == '\n') {
+                        find_result.pop_back();
+                    }
+                    if (std::filesystem::exists(find_result) && face_cascade.load(find_result)) {
+                        std::cout << "Found Haar cascade file via search: " << find_result << std::endl;
+                        cascade_loaded = true;
+                    }
+                }
+                pclose(pipe);
+            }
+            
+            if (!cascade_loaded) {
+                std::cerr << "Warning: No Haar cascade files found, face detection will fail" << std::endl;
+                return landmarks; // Return empty landmarks
+            }
         }
 
         // Remove duplicate detections (simple approach)

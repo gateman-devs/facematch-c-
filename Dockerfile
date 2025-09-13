@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y \
     libopencv-objdetect-dev \
     libopencv-ml-dev \
     # OpenCV data files (Haar cascades, etc.)
-    opencv-data \
+    libopencv-data \
     # Threading and system libraries
     libtbb-dev \
     libboost-system-dev \
