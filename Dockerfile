@@ -75,6 +75,8 @@ RUN chmod +x download_models.sh && \
 # Copy source code
 COPY CMakeLists.txt ./
 COPY src/ ./src/
+COPY test_lightweight_simple.cpp ./
+COPY lightweight_server.cpp ./
 
 # Build the full service (limit parallel jobs to avoid OOM)
 RUN mkdir -p build && cd build && \
