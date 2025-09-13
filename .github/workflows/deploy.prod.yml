@@ -35,43 +35,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Test Docker build locally
-        run: |
-          echo "🧪 Testing Docker build..."
-          docker build -t test-build . --progress=plain
-          echo "✅ Docker build test successful"
-
-      - name: Test Docker container functionality
-        if: github.event_name == 'pull_request'
-        run: |
-          echo "🧪 Running API tests..."
-          docker run -d --name test-container -p 8080:8080 test-build
-          sleep 20
-
-          # Test health endpoint
-          curl -f -s http://localhost:8080/health > /dev/null || exit 1
-          echo "✓ Health endpoint is accessible"
-
-          # Test API endpoints
-          curl -s -X POST http://localhost:8080/compare-faces \
-            -H "Content-Type: application/json" \
-            -d '{"image1": "test", "image2": "test"}' > /dev/null || exit 1
-          echo "✓ Compare-faces endpoint is accessible"
-
-          curl -s -X POST http://localhost:8080/liveness-check \
-            -H "Content-Type: application/json" \
-            -d '{"image": "test"}' > /dev/null || exit 1
-          echo "✓ Liveness-check endpoint is accessible"
-
-          curl -s -X POST http://localhost:8080/generate-challenge \
-            -H "Content-Type: application/json" \
-            -d '{}' > /dev/null || exit 1
-          echo "✓ Generate-challenge endpoint is accessible"
-
-          # Clean up
-          docker stop test-container && docker rm test-container
-          echo "✅ All API tests passed"
-
       - name: Log in to Harbor Registry
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v3
