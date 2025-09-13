@@ -81,9 +81,9 @@ COPY lightweight_server.cpp ./
 # Build the full service (limit parallel jobs to avoid OOM)
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CXX_FLAGS="-O2 -DNDEBUG -march=native" \
-        -DCMAKE_C_FLAGS="-O2 -DNDEBUG -march=native" && \
-    make MLFaceService -j2
+        -DCMAKE_CXX_FLAGS="-O2 -DNDEBUG" \
+        -DCMAKE_C_FLAGS="-O2 -DNDEBUG" && \
+    make MLFaceService -j1
 
 # ============================================
 # Runtime stage - Minimal runtime dependencies

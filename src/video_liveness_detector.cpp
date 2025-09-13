@@ -58,12 +58,11 @@ bool VideoLivenessDetector::initializeMediaPipeModels() {
         // Try to load MediaPipe BlazeFace model for face detection
         std::string face_detection_model = "./models/mediapipe/blaze_face_short_range.tflite";
         if (std::filesystem::exists(face_detection_model)) {
-            face_detection_net = cv::dnn::readNetFromTFLite(face_detection_model);
-            if (face_detection_net.empty()) {
-                std::cerr << "Failed to load MediaPipe BlazeFace model" << std::endl;
-                return false;
-            }
-            std::cout << "Loaded MediaPipe BlazeFace model for face detection" << std::endl;
+            // Note: readNetFromTFLite requires OpenCV 4.7+
+            // For older versions, we'll skip TFLite and use alternative models
+            std::cerr << "TFLite model found but readNetFromTFLite not available in this OpenCV version" << std::endl;
+            std::cerr << "Falling back to alternative face detection methods" << std::endl;
+            return false;
         } else {
             std::cerr << "MediaPipe BlazeFace model not found at: " << face_detection_model << std::endl;
             return false;
