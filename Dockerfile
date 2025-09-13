@@ -103,7 +103,7 @@ RUN apt-get update && apt-get install -y \
     libopencv-objdetect4.5d \
     libopencv-ml4.5d \
     # OpenCV data files (contains Haar cascades)
-    libopencv-data \
+    opencv-data \
     # Threading
     libtbb12 \
     # Boost runtime
