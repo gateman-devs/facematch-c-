@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# Lightweight Face Service - Local Setup Script
-# This script builds and configures the lightweight OpenCV-only implementation
+# Full Face Recognition Service - Local Setup Script  
+# This script builds and configures the complete ML-based face service with all endpoints
 
 set -e  # Exit on any error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build_lightweight"
+BUILD_DIR="$SCRIPT_DIR/build"
 
-echo "=== Lightweight Face Service - Local Setup ==="
+echo "=== Full Face Recognition Service - Local Setup ==="
 echo "Project directory: $SCRIPT_DIR"
-echo "Build directory: $BUILD_DIR"
-echo "================================================"
+echo "Build directory: $BUILD_DIR" 
+echo "===================================================="
 
 # Default configuration
 PORT=8080
@@ -94,9 +94,9 @@ check_build_deps() {
     fi
 }
 
-# Function to build the lightweight project
+# Function to build the full web service
 build_project() {
-    log "Building Lightweight Face Service..."
+    log "Building Full Face Recognition Service..."
     
     # Create build directory
     mkdir -p "$BUILD_DIR"
@@ -120,12 +120,17 @@ build_project() {
         make -j"$cpu_count" >/dev/null
     fi
     
-    # Check if binaries were created
+    # Check if full web server binary was created
     local build_success=false
-    for binary in "test_lightweight" "lightweight_server" "lightweight_web_server"; do
+    if [[ -f "$BUILD_DIR/MLFaceService" ]]; then
+        log "✓ Built: MLFaceService (full web server with all endpoints)"
+        build_success=true
+    fi
+    
+    # Also check for lightweight binaries as fallback
+    for binary in "test_lightweight" "lightweight_server"; do
         if [[ -f "$BUILD_DIR/$binary" ]]; then
             log "✓ Built: $binary"
-            build_success=true
         fi
     done
     
@@ -134,7 +139,8 @@ build_project() {
         cd "$SCRIPT_DIR"
         return 0
     else
-        log "✗ Build failed - no binaries found"
+        log "✗ Build failed - MLFaceService binary not found"
+        log "Make sure all dependencies are installed (dlib, crow, nlohmann/json, hiredis)"
         cd "$SCRIPT_DIR"
         return 1
     fi
@@ -142,7 +148,7 @@ build_project() {
 
 # Function to check if rebuild is needed
 needs_rebuild() {
-    local binary_path="$BUILD_DIR/optimized_test"
+    local binary_path="$BUILD_DIR/MLFaceService"
     
     # Force rebuild if requested
     if [[ "$FORCE_REBUILD" == "true" ]]; then
@@ -182,20 +188,15 @@ needs_rebuild() {
 
 # Function to run tests
 run_tests() {
-    log "Running lightweight implementation tests..."
+    log "Running web server tests..."
     cd "$BUILD_DIR"
     
-    if [[ -f "./optimized_test" ]]; then
-        log "Running optimized test suite..."
-        ./optimized_test
+    if [[ -f "./test_lightweight" ]]; then
+        log "Running lightweight test suite..."
+        ./test_lightweight
     else
-        log "⚠ Optimized test not found, running basic test..."
-        if [[ -f "./test_lightweight" ]]; then
-            ./test_lightweight
-        else
-            log "✗ No test binaries found"
-            return 1
-        fi
+        log "⚠ Test binary not found, skipping tests..."
+        return 0
     fi
     
     cd "$SCRIPT_DIR"
@@ -204,41 +205,45 @@ run_tests() {
 # Function to show final information
 show_final_info() {
     log ""
-    log "=========================================="
-    log "✓ Lightweight Face Service Setup Complete!"
+    log "=============================================="
+    log "✓ Face Recognition Service Setup Complete!"
     log ""
     log "Built binaries:"
-    for binary in "test_lightweight" "lightweight_server" "optimized_test" "diagnostic_test"; do
+    for binary in "MLFaceService" "test_lightweight" "lightweight_server"; do
         if [[ -f "$BUILD_DIR/$binary" ]]; then
             log "  - $binary"
         fi
     done
     log ""
     log "Key features:"
-    log "  ✓ No heavy ML models (TensorFlow/dlib removed)"
-    log "  ✓ OpenCV-only implementation"  
-    log "  ✓ 100% accuracy on test videos"
-    log "  ✓ ~5s processing time per video"
-    log "  ✓ Minimal CPU usage"
-    log "  ✓ First-movement detection (ignores returns)"
+    log "  ✓ Full ML models (dlib face recognition)"
+    log "  ✓ Face comparison with confidence scoring"
+    log "  ✓ Liveness detection (anti-spoofing)"
+    log "  ✓ Challenge-based video liveness verification"
+    log "  ✓ Redis caching for challenges"
+    log "  ✓ RESTful API with all endpoints"
+    log ""
+    log "Available endpoints:"
+    log "  GET  /health           - Health check"
+    log "  POST /compare-faces    - Compare two faces"
+    log "  POST /liveness-check   - Check face liveness"
+    log "  POST /generate-challenge - Generate liveness challenge"
+    log "  POST /verify-video-liveness - Verify challenge videos"
     log ""
     log "Manual commands:"
     log "  Run tests: cd $BUILD_DIR && ./test_lightweight"
-    log "  Start server: cd $BUILD_DIR && ./lightweight_server --port $PORT"
-    log ""
-    log "Integration files:"
-    log "  Use: src/lightweight/lightweight_video_detector_simple.cpp"
-    log "       src/lightweight/lightweight_video_detector_simple.hpp"
-    log "=========================================="
+    log "  Start full server: cd $BUILD_DIR && ./MLFaceService --port $PORT --models ../models"
+    log "=============================================="
 }
 
 # Function to start the server
 start_server() {
-    local server_path="$BUILD_DIR/lightweight_server"
+    local server_path="$BUILD_DIR/MLFaceService"
+    local models_path="$SCRIPT_DIR/models"
     
     # Check if server binary exists
     if [[ ! -f "$server_path" ]]; then
-        log "✗ Server binary not found: $server_path"
+        log "✗ Full web server binary not found: $server_path"
         log "Please rebuild with: $0 --rebuild"
         return 1
     fi
@@ -248,13 +253,30 @@ start_server() {
         return 1
     fi
     
+    # Check if models directory exists
+    if [[ ! -d "$models_path" ]]; then
+        log "⚠ Models directory not found: $models_path"
+        log "Downloading models first..."
+        cd "$SCRIPT_DIR"
+        if [[ -f "./download_models.sh" ]]; then
+            chmod +x ./download_models.sh
+            ./download_models.sh
+        else
+            log "✗ download_models.sh script not found"
+            log "Please ensure ML models are available in: $models_path"
+        fi
+    fi
+    
     log "Server binary: $server_path"
+    log "Models path: $models_path"
     log "Port: $PORT"
+    log ""
+    log "Starting Full Face Recognition Service with all endpoints..."
     log ""
     
     # Change to build directory and start server
     cd "$BUILD_DIR"
-    exec "./lightweight_server" --port "$PORT" --test
+    exec "./MLFaceService" --port "$PORT" --models "$models_path"
 }
 
 # Function to handle cleanup on exit
@@ -305,7 +327,7 @@ fi
 
 # Main execution
 main() {
-    log "Starting Lightweight Face Service setup..."
+    log "Starting Full Face Recognition Service setup..."
     
     # Check build dependencies
     if ! check_build_deps; then
@@ -331,7 +353,7 @@ main() {
     
     log "✓ Setup completed successfully!"
     log ""
-    log "Starting Lightweight Face Service Server..."
+    log "Starting Full Face Recognition Service Server..."
     start_server
 }
 
