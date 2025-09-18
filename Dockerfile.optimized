@@ -1,0 +1,108 @@
+# Multi-stage build for optimized image size and performance
+FROM ubuntu:22.04 AS builder
+
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    pkg-config \
+    libopencv-dev \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    python3-pip \
+    python3-numpy \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Bazel for TensorFlow Lite
+RUN wget -q https://github.com/bazelbuild/bazel/releases/download/6.1.0/bazel-6.1.0-linux-x86_64 -O /usr/local/bin/bazel \
+    && chmod +x /usr/local/bin/bazel
+
+# Clone and build TensorFlow Lite
+WORKDIR /tmp
+RUN git clone --depth 1 --branch v2.14.0 https://github.com/tensorflow/tensorflow.git \
+    && cd tensorflow \
+    && ./configure \
+    && bazel build -c opt --config=noaws --config=nohdfs --config=nonccl \
+    //tensorflow/lite:libtensorflowlite.so \
+    //tensorflow/lite/c:libtensorflowlite_c.so
+
+# Install TensorFlow Lite headers and libraries
+RUN mkdir -p /usr/local/include/tensorflow /usr/local/lib \
+    && cp -r /tmp/tensorflow/tensorflow /usr/local/include/ \
+    && cp /tmp/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.so /usr/local/lib/ \
+    && cp /tmp/tensorflow/bazel-bin/tensorflow/lite/c/libtensorflowlite_c.so /usr/local/lib/ \
+    && ldconfig
+
+# Install nlohmann/json
+RUN wget https://github.com/nlohmann/json/releases/download/v3.11.2/json.hpp -O /usr/local/include/json.hpp
+
+# Copy source code
+WORKDIR /app
+COPY . .
+
+# Download BlazeFace model
+RUN mkdir -p models && \
+    wget -O models/blazeface.tflite \
+    https://storage.googleapis.com/mediapipe-models/face_detection/blaze_face_short_range/float16/1/blaze_face_short_range.tflite
+
+# Build the optimized server
+RUN mkdir -p build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_FLAGS_RELEASE="-O3 -march=x86-64 -mtune=generic -ffast-math -funroll-loops" \
+          -DTENSORFLOW_SOURCE_DIR=/usr/local/include/tensorflow \
+          ../CMakeLists_optimized.txt && \
+    make -j$(nproc) optimized_server test_directions
+
+# Runtime stage
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    libopencv-core4.5d \
+    libopencv-imgproc4.5d \
+    libopencv-imgcodecs4.5d \
+    libopencv-videoio4.5d \
+    libcurl4 \
+    libgomp1 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+WORKDIR /app
+
+# Copy built binaries and required files from builder
+COPY --from=builder /usr/local/lib/libtensorflowlite*.so* /usr/local/lib/
+COPY --from=builder /app/build/optimized_server /app/
+COPY --from=builder /app/build/test_directions /app/
+COPY --from=builder /app/models /app/models
+
+# Update library cache
+RUN ldconfig
+
+# Change ownership to app user
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Default command
+CMD ["./optimized_server", "--port", "8080"]

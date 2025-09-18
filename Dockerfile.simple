@@ -1,0 +1,95 @@
+# Multi-stage build for optimized image size and performance
+FROM ubuntu:22.04 AS builder
+
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    pkg-config \
+    libopencv-dev \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy source code
+WORKDIR /app
+COPY . .
+
+# Download models
+RUN mkdir -p models && \
+    curl -L -o models/deploy.prototxt \
+    https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt && \
+    curl -L -o models/res10_300x300_ssd_iter_140000.caffemodel \
+    https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel && \
+    curl -L -o models/haarcascade_frontalface_default.xml \
+    https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml
+
+# Download nlohmann/json if not present
+RUN if [ ! -f "crow/json.hpp" ]; then \
+        mkdir -p crow && \
+        curl -L -o crow/json.hpp \
+        https://github.com/nlohmann/json/releases/download/v3.11.2/json.hpp; \
+    fi
+
+# Build the optimized server
+RUN mkdir -p build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_FLAGS_RELEASE="-O3 -march=x86-64 -mtune=generic -ffast-math -funroll-loops" \
+          ../CMakeLists_simple.txt && \
+    make -j$(nproc) optimized_server test_directions
+
+# Runtime stage
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    libopencv-core4.5d \
+    libopencv-imgproc4.5d \
+    libopencv-imgcodecs4.5d \
+    libopencv-videoio4.5d \
+    libopencv-dnn4.5d \
+    libopencv-objdetect4.5d \
+    libcurl4 \
+    libgomp1 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+WORKDIR /app
+
+# Copy built binaries and required files from builder
+COPY --from=builder /app/build/optimized_server /app/
+COPY --from=builder /app/build/test_directions /app/
+COPY --from=builder /app/models /app/models
+COPY --from=builder /app/crow /app/crow
+
+# Create necessary directories
+RUN mkdir -p /tmp && chmod 777 /tmp
+
+# Change ownership to app user
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Default command
+CMD ["./optimized_server", "--port", "8080"]

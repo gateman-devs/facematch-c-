@@ -1,0 +1,151 @@
+cmake_minimum_required(VERSION 3.10)
+project(OptimizedFaceService)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_BUILD_TYPE Release)
+
+# Optimize for speed
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -mtune=native -ffast-math -funroll-loops -flto")
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-flto")
+
+# Find required packages
+find_package(OpenCV REQUIRED)
+find_package(Threads REQUIRED)
+find_package(CURL REQUIRED)
+
+# Find TensorFlow Lite
+set(TENSORFLOW_SOURCE_DIR "/usr/local/include/tensorflow" CACHE PATH "Path to TensorFlow source")
+if(NOT EXISTS ${TENSORFLOW_SOURCE_DIR})
+    set(TENSORFLOW_SOURCE_DIR "/opt/tensorflow" CACHE PATH "Path to TensorFlow source")
+endif()
+
+# TensorFlow Lite include directories
+set(TFLITE_INCLUDE_DIRS
+    ${TENSORFLOW_SOURCE_DIR}
+    ${TENSORFLOW_SOURCE_DIR}/tensorflow/lite/tools/make/downloads/flatbuffers/include
+    ${TENSORFLOW_SOURCE_DIR}/tensorflow/lite/tools/make/downloads/absl
+)
+
+# Find TensorFlow Lite library
+find_library(TENSORFLOW_LITE_LIB
+    NAMES tensorflowlite tensorflow-lite
+    PATHS /usr/local/lib /usr/lib /opt/tensorflow/lib
+    PATH_SUFFIXES tensorflow/lite
+)
+
+if(NOT TENSORFLOW_LITE_LIB)
+    message(WARNING "TensorFlow Lite not found, will attempt to build without it")
+    # Fallback to download TensorFlow Lite if not found
+    include(FetchContent)
+    FetchContent_Declare(
+        tensorflowlite
+        GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
+        GIT_TAG v2.11.0
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+    )
+    FetchContent_MakeAvailable(tensorflowlite)
+endif()
+
+# Include directories
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/crow
+    ${OpenCV_INCLUDE_DIRS}
+    ${CURL_INCLUDE_DIRS}
+    ${TFLITE_INCLUDE_DIRS}
+    /usr/local/include
+    /opt/homebrew/include  # For macOS with Homebrew
+)
+
+# Link directories
+link_directories(
+    /usr/local/lib
+    /opt/homebrew/lib  # For macOS with Homebrew
+)
+
+# Find nlohmann_json
+find_package(nlohmann_json QUIET)
+if(NOT nlohmann_json_FOUND)
+    # If not found, download it
+    include(FetchContent)
+    FetchContent_Declare(
+        json
+        URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.hpp
+        DOWNLOAD_NO_EXTRACT TRUE
+        DOWNLOAD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/crow
+    )
+    FetchContent_MakeAvailable(json)
+endif()
+
+# BlazeFace library
+add_library(blazeface_lib STATIC
+    src/blazeface/blazeface_detector.cpp
+)
+
+target_link_libraries(blazeface_lib
+    ${OpenCV_LIBS}
+    ${TENSORFLOW_LITE_LIB}
+    ${CURL_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
+target_compile_options(blazeface_lib PRIVATE -fPIC)
+
+# Optimized web server executable
+add_executable(optimized_server
+    optimized_server.cpp
+)
+
+target_link_libraries(optimized_server
+    blazeface_lib
+    ${OpenCV_LIBS}
+    ${TENSORFLOW_LITE_LIB}
+    ${CURL_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    pthread
+)
+
+# Test directions executable
+add_executable(test_directions
+    test_directions.cpp
+)
+
+target_link_libraries(test_directions
+    blazeface_lib
+    ${OpenCV_LIBS}
+    ${TENSORFLOW_LITE_LIB}
+    ${CURL_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
+# Installation rules
+install(TARGETS optimized_server test_directions
+    RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY models/
+    DESTINATION models
+    FILES_MATCHING PATTERN "*.tflite"
+)
+
+# Custom target to download models
+add_custom_target(download_models
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_SOURCE_DIR}/models
+    COMMAND ${CMAKE_COMMAND} -E echo "Downloading BlazeFace model..."
+    COMMAND curl -L -o ${CMAKE_CURRENT_SOURCE_DIR}/models/blazeface.tflite https://storage.googleapis.com/mediapipe-models/face_detection/blaze_face_short_range/float16/1/blaze_face_short_range.tflite
+    COMMAND ${CMAKE_COMMAND} -E echo "Model downloaded successfully"
+)
+
+# Print configuration summary
+message(STATUS "========================================")
+message(STATUS "Optimized Face Service Configuration")
+message(STATUS "========================================")
+message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
+message(STATUS "CURL libraries: ${CURL_LIBRARIES}")
+message(STATUS "TensorFlow Lite: ${TENSORFLOW_LITE_LIB}")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ compiler flags: ${CMAKE_CXX_FLAGS_RELEASE}")
+message(STATUS "========================================")
