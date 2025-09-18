@@ -14,8 +14,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Set working directory
 WORKDIR /app
 
-# Install comprehensive build dependencies
-RUN apt-get update && apt-get install -y \
+# Install comprehensive build dependencies with retry logic
+RUN set -ex && \
+    for i in 1 2 3; do \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     # Build tools
     build-essential \
     cmake \
@@ -56,13 +59,19 @@ RUN apt-get update && apt-get install -y \
     libx11-dev \
     # ASIO for networking
     libasio-dev \
-    # Clean up
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* && break || \
+    if [ $i -lt 3 ]; then sleep 5; else exit 1; fi; \
+    done
 
-# Install dlib from apt (simpler and more reliable)
-RUN apt-get update && apt-get install -y \
+# Install dlib from apt (simpler and more reliable) with retry logic
+RUN set -ex && \
+    for i in 1 2 3; do \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     libdlib-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* && break || \
+    if [ $i -lt 3 ]; then sleep 5; else exit 1; fi; \
+    done
 
 # Download and extract Crow web framework
 RUN git clone --depth 1 --branch master https://github.com/CrowCpp/Crow.git crow
@@ -81,8 +90,8 @@ COPY lightweight_server.cpp ./
 # Build the full service (limit parallel jobs to avoid OOM)
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CXX_FLAGS="-O2 -DNDEBUG" \
-        -DCMAKE_C_FLAGS="-O2 -DNDEBUG" && \
+    -DCMAKE_CXX_FLAGS="-O2 -DNDEBUG" \
+    -DCMAKE_C_FLAGS="-O2 -DNDEBUG" && \
     make MLFaceService -j1
 
 # ============================================
@@ -91,8 +100,11 @@ RUN mkdir -p build && cd build && \
 
 FROM ubuntu:22.04 AS runtime
 
-# Install minimal runtime dependencies
-RUN apt-get update && apt-get install -y \
+# Install minimal runtime dependencies with retry logic
+RUN set -ex && \
+    for i in 1 2 3; do \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     # OpenCV runtime
     libopencv-core4.5d \
     libopencv-imgproc4.5d \
@@ -126,8 +138,9 @@ RUN apt-get update && apt-get install -y \
     libdlib19 \
     # Utilities
     curl \
-    # Clean up
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* && break || \
+    if [ $i -lt 3 ]; then sleep 5; else exit 1; fi; \
+    done
 
 # Create app user for security
 RUN useradd -r -s /bin/false appuser && \
