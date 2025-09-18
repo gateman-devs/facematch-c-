@@ -1,0 +1,214 @@
+# Multi-stage build for optimized image size and performance
+FROM ubuntu:22.04 AS builder
+
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Update package lists and install basic tools first
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    gnupg \
+    lsb-release \
+    software-properties-common
+
+# Install build dependencies with fallback options
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --fix-missing \
+    build-essential \
+    cmake \
+    git \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install OpenCV - try different package names for compatibility
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends libopencv-dev || \
+     apt-get install -y --no-install-recommends opencv-dev || \
+     apt-get install -y --no-install-recommends \
+        libopencv-core-dev \
+        libopencv-imgproc-dev \
+        libopencv-imgcodecs-dev \
+        libopencv-videoio-dev \
+        libopencv-dnn-dev \
+        libopencv-objdetect-dev || \
+     echo "OpenCV packages not found, will build from source") \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install CURL development files
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --fix-missing \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build OpenCV from source if not available via package manager
+RUN if ! pkg-config --exists opencv4 && ! pkg-config --exists opencv; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libswscale-dev \
+            libv4l-dev \
+            libatlas-base-dev \
+            gfortran \
+            python3-dev && \
+        cd /tmp && \
+        wget -O opencv.zip https://github.com/opencv/opencv/archive/4.5.5.zip && \
+        unzip opencv.zip && \
+        cd opencv-4.5.5 && \
+        mkdir build && cd build && \
+        cmake -DCMAKE_BUILD_TYPE=RELEASE \
+              -DCMAKE_INSTALL_PREFIX=/usr/local \
+              -DWITH_TBB=ON \
+              -DWITH_V4L=ON \
+              -DWITH_OPENGL=ON \
+              -DWITH_OPENCL=ON \
+              -DBUILD_EXAMPLES=OFF \
+              -DBUILD_opencv_apps=OFF \
+              -DBUILD_DOCS=OFF \
+              -DBUILD_PERF_TESTS=OFF \
+              -DBUILD_TESTS=OFF .. && \
+        make -j$(nproc) && \
+        make install && \
+        ldconfig && \
+        cd / && rm -rf /tmp/opencv*; \
+    fi
+
+# Copy source code
+WORKDIR /app
+COPY . .
+
+# Download models with retry logic
+RUN mkdir -p models && \
+    for i in 1 2 3; do \
+        curl -L -o models/deploy.prototxt \
+            https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt && \
+        break || sleep 5; \
+    done && \
+    for i in 1 2 3; do \
+        curl -L -o models/res10_300x300_ssd_iter_140000.caffemodel \
+            https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel && \
+        break || sleep 5; \
+    done && \
+    for i in 1 2 3; do \
+        curl -L -o models/haarcascade_frontalface_default.xml \
+            https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml && \
+        break || sleep 5; \
+    done
+
+# Download nlohmann/json if not present
+RUN if [ ! -f "crow/json.hpp" ]; then \
+        mkdir -p crow && \
+        for i in 1 2 3; do \
+            curl -L -o crow/json.hpp \
+                https://github.com/nlohmann/json/releases/download/v3.11.2/json.hpp && \
+            break || sleep 5; \
+        done; \
+    fi
+
+# Build the optimized server
+RUN mkdir -p build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_FLAGS_RELEASE="-O3 -march=x86-64 -mtune=generic -ffast-math -funroll-loops" \
+          .. && \
+    make -j$(nproc) optimized_server test_directions || \
+    (echo "Build failed, attempting with reduced optimization" && \
+     cmake -DCMAKE_BUILD_TYPE=Release \
+           -DCMAKE_CXX_FLAGS_RELEASE="-O2" \
+           .. && \
+     make -j$(nproc) optimized_server test_directions)
+
+# Runtime stage
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install runtime dependencies with multiple fallback options
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --fix-missing \
+    ca-certificates \
+    curl \
+    libgomp1 && \
+    (apt-get install -y --no-install-recommends \
+        libopencv-core4.5d \
+        libopencv-imgproc4.5d \
+        libopencv-imgcodecs4.5d \
+        libopencv-videoio4.5d \
+        libopencv-dnn4.5d \
+        libopencv-objdetect4.5d || \
+     apt-get install -y --no-install-recommends \
+        libopencv-core4.5 \
+        libopencv-imgproc4.5 \
+        libopencv-imgcodecs4.5 \
+        libopencv-videoio4.5 \
+        libopencv-dnn4.5 \
+        libopencv-objdetect4.5 || \
+     apt-get install -y --no-install-recommends \
+        libopencv-core-dev \
+        libopencv-imgproc-dev \
+        libopencv-imgcodecs-dev \
+        libopencv-videoio-dev \
+        libopencv-dnn-dev \
+        libopencv-objdetect-dev || \
+     apt-get install -y --no-install-recommends \
+        libopencv-dev || \
+     echo "Warning: OpenCV runtime packages not found") && \
+    apt-get install -y --no-install-recommends \
+        libcurl4 || \
+    apt-get install -y --no-install-recommends \
+        libcurl3 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy OpenCV libraries if built from source
+COPY --from=builder /usr/local/lib/libopencv* /usr/local/lib/ 2>/dev/null || true
+COPY --from=builder /usr/local/lib/pkgconfig/opencv* /usr/local/lib/pkgconfig/ 2>/dev/null || true
+
+# Create app user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+WORKDIR /app
+
+# Copy built binaries and required files from builder
+COPY --from=builder /app/build/optimized_server /app/ 2>/dev/null || \
+     COPY --from=builder /app/build_simple/optimized_server /app/ 2>/dev/null || \
+     echo "Warning: optimized_server not found"
+
+COPY --from=builder /app/build/test_directions /app/ 2>/dev/null || \
+     COPY --from=builder /app/build_simple/test_directions /app/ 2>/dev/null || \
+     echo "Warning: test_directions not found"
+
+COPY --from=builder /app/models /app/models
+COPY --from=builder /app/crow /app/crow
+
+# Create necessary directories and set permissions
+RUN mkdir -p /tmp && chmod 777 /tmp && \
+    chown -R appuser:appuser /app && \
+    ldconfig
+
+# Verify the binary exists
+RUN if [ ! -f /app/optimized_server ]; then \
+        echo "ERROR: optimized_server binary not found!"; \
+        ls -la /app/; \
+        exit 1; \
+    fi
+
+USER appuser
+
+# Expose port
+EXPOSE 8080
+
+# Health check with longer timeout for initial startup
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Default command with error handling
+CMD ["/app/optimized_server", "--port", "8080"]

@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --fix-missing \
     build-essential \
     cmake \
     git \
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     libssl-dev \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* || true
 
 # Copy source code
 WORKDIR /app
@@ -53,13 +53,29 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
 # Install runtime dependencies only
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && \
+    apt-get install -y --fix-missing \
+    libopencv-core-dev \
+    libopencv-imgproc-dev \
+    libopencv-imgcodecs-dev \
+    libopencv-videoio-dev \
+    libopencv-dnn-dev \
+    libopencv-objdetect-dev \
+    libcurl4 \
+    libgomp1 \
+    ca-certificates \
+    || apt-get install -y --fix-missing \
     libopencv-core4.5d \
     libopencv-imgproc4.5d \
     libopencv-imgcodecs4.5d \
     libopencv-videoio4.5d \
     libopencv-dnn4.5d \
     libopencv-objdetect4.5d \
+    libcurl4 \
+    libgomp1 \
+    ca-certificates \
+    || apt-get install -y --fix-missing \
+    libopencv-dev \
     libcurl4 \
     libgomp1 \
     ca-certificates \
