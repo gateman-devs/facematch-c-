@@ -84,7 +84,7 @@ RUN chmod +x download_models.sh && \
     ./download_models.sh
 
 # Copy source code
-COPY CMakeLists.txt ./
+COPY CMakeLists_full.txt ./CMakeLists.txt
 COPY src/ ./src/
 COPY test_lightweight_simple.cpp ./
 COPY lightweight_server.cpp ./
