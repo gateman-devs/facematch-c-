@@ -19,6 +19,8 @@ RUN set -ex && \
     for i in 1 2 3; do \
     apt-get update && \
     apt-get install -y --no-install-recommends \
+    # CA certificates for SSL/TLS
+    ca-certificates \
     # Build tools
     build-essential \
     cmake \
